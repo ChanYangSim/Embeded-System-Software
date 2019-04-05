@@ -14,9 +14,8 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/wait.h>
+#include <sys/ipc.h>
 #include <sys/msg.h>
-//#include "input_process.h"
-//#include "output_process.h"
 
 #define CLOCK 1
 #define COUNTER 2
@@ -48,15 +47,14 @@
 #define BUZZER_DEVICE "/dev/fpga_buzzer"
 #define MOT_DEVICE "/dev/fpga_step_motor"
 #define FPGA_BASE_ADDRESS 0x08000000
-
 #define LED_ADDR 0x16
 #define MAX_SWITCH 9
 #define MAX_LCD 32
 #define DELAY 30000
 #define SEC 26300
 
-#define IN_AND_MAIN 1234
-#define MAIN_AND_OUT 4321
+//#define IN_AND_MAIN 1234
+//#define MAIN_AND_OUT 4321
 
 struct msgbuf{
 	long msgtype;
@@ -73,3 +71,8 @@ enum process_type{
     IN_AND_MAIN,
     MAIN_AND_OUT
 };
+unsigned char quit =0;
+void user_signal1(int sig){quit=1;}
+int input_proc();
+int output_proc();
+int main_proc();
