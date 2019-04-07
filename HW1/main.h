@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <errno.h>
-#include <error.h>
 #include <fcntl.h>
 #include <dirent.h>
 #include <linux/input.h>
@@ -16,7 +15,7 @@
 #include <sys/wait.h>
 #include <sys/ipc.h>
 #include <sys/msg.h>
-
+#include <stdlib.h>
 #define CLOCK 1
 #define COUNTER 2
 #define TEXT_EDITOR 3
@@ -32,6 +31,12 @@
 #define VOL_UP_KEY 115
 #define VOL_DOWN_KEY 114
 
+
+#define TYPE_BACK 1
+#define TYPE_PROG 2
+#define TYPE_VOL_UP 3
+#define TYPE_VOL_DOWN 4
+#define TYPE_SWITCH 5
 
 #define KEY_RELEASE 0
 #define KEY_PRESS 1
@@ -53,23 +58,12 @@
 #define DELAY 30000
 #define SEC 26300
 
-//#define IN_AND_MAIN 1234
-//#define MAIN_AND_OUT 4321
+#define IN_AND_MAIN 1000
+#define MAIN_AND_OUT 2000
 
 struct msgbuf{
 	long msgtype;
-	char text[256];
-};
-enum msg_type{
-    TYPE_BACK,
-    TYPE_PROG,
-    TYPE_VOL_UP,
-    TYPE_VOL_DOWN,
-    TYPE_SWITCH
-};
-enum process_type{
-    IN_AND_MAIN,
-    MAIN_AND_OUT
+	unsigned char text[BUF_SIZE];
 };
 unsigned char quit =0;
 void user_signal1(int sig){quit=1;}
