@@ -20,8 +20,7 @@
 #define COUNTER 2
 #define TEXT_EDITOR 3
 #define DRAW_BOARD 4
-#define SPIN 4
-#define MAZE 5
+#define EXTRA 5
 
 
 #define BUF_SIZE 64
@@ -63,7 +62,7 @@
 
 struct msgbuf{
 	long msgtype;
-	unsigned char text[BUF_SIZE];
+	unsigned char text[32];
 };
 unsigned char quit =0;
 void user_signal1(int sig){quit=1;}
