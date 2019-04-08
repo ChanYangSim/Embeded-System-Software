@@ -23,7 +23,7 @@
 #define EXTRA 5
 
 
-#define BUF_SIZE 64
+#define BUF_SIZE 32
 
 #define BACK_KEY 158
 #define PROG_KEY 116
@@ -39,6 +39,8 @@
 
 #define KEY_RELEASE 0
 #define KEY_PRESS 1
+
+#define MSGTYPE_ 1
 
 #define KEY_DEVICE "/dev/input/event0"
 #define SWITCH_DEVICE "/dev/fpga_push_switch"
@@ -62,7 +64,7 @@
 
 struct msgbuf{
 	long msgtype;
-	unsigned char text[32];
+	unsigned char text[BUF_SIZE];
 };
 unsigned char quit =0;
 void user_signal1(int sig){quit=1;}
