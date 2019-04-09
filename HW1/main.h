@@ -58,12 +58,12 @@
 #define MAX_SWITCH 9
 #define MAX_LCD 32
 #define DELAY 30000
-#define SEC 26300
+#define SEC 400
 
-#define IN_AND_MAIN_D 1000
+#define IN_AND_MAIN_D 8000
 #define IN_AND_MAIN_SW 2000
 #define MAIN_AND_OUT_D 3000
-#define MAIN_AND_OTU_SW 4000
+#define MAIN_AND_OUT_SW 4000
 
 struct msgbuf{
 	long msgtype;
@@ -74,3 +74,6 @@ void user_signal1(int sig){quit=1;}
 int input_proc();
 int output_proc();
 int main_proc();
+int check_sw(unsigned char sw[]);
+int out_clock(unsigned char sw[],int fd_fnd,char* led_addr);
+int out_counter(struct msgbuf msgrecv_sw);
