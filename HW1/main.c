@@ -13,7 +13,7 @@ int main(int argc, char *argv[])
         if(pid_out>0)
             main_proc();
         else
-            ;//output_proc();
+            output_proc();
     }
     else
     {
@@ -83,17 +83,17 @@ int input_proc(){
 
 	(void)signal(SIGINT,user_signal1);
 	
-	key_id_d = msgget((key_t)4000,IPC_CREAT|0666);
-	key_id_sw = msgget((key_t)3000,IPC_CREAT|0666);
+	key_id_d = msgget((key_t)IN_AND_MAIN_D,IPC_CREAT|0666);
+	key_id_sw = msgget((key_t)IN_AND_MAIN_SW,IPC_CREAT|0666);
 	//printf("%d %d\n",ftok("/home/embe/Desktop",'D'),ftok("/home/embe/Desktop",'S'));
 	printf("%d %d\n",key_id_d,key_id_sw);
     int mode=1;
-
 	while(1)
 	{
 		//printf("%d %d\n",key_id_d,key_id_sw);
 		memset(&msgsend,0,sizeof(struct msgbuf));
 		msgsend.msgtype=1;
+        msgsend.text[1]=mode;
 		int read_d = read(fd_device, event, size_ev * BUF_SIZE);
 		if(read_d >= sizeof(event[0]))
 		{
@@ -155,8 +155,7 @@ int input_proc(){
 	close(fd_device);
 	close(fd_switch);
 	usleep(10000000);
-	msgctl(key_id_d,IPC_RMID,NULL);
-	msgctl(key_id_sw,IPC_RMID,NULL);
+
 	return 0;
 }
 int main_proc()
@@ -167,11 +166,14 @@ int main_proc()
 	key_t key_id_d,key_id_sw;
 	int msgtype;
 	memset(&msgrecv_d,0,sizeof(struct msgbuf));
-	key_id_d = msgget((key_t)4000,IPC_CREAT|0666);
-	key_id_sw = msgget((key_t)3000,IPC_CREAT|0666);
+	key_id_d = msgget((key_t)IN_AND_MAIN_D,IPC_CREAT|0666);
+	key_id_sw = msgget((key_t)IN_AND_MAIN_SW,IPC_CREAT|0666);
+    key_id_to_out_d = msgget((key_t)MAIN_AND_OUT_D,IPC_CREAT|0666);
+    key_id_to_out_sw = msgget((key_t)MAIN_AND_OUT_SW,IPC_CREAT|0666);
+    
 	while(1){
 		//memset(&msgrecv_d,0,sizeof(struct msgbuf));
-		msgrcv(key_id_d,(void*)&msgrecv_d,sizeof(struct msgbuf),1,IPC_NOWAIT);
+		msgrcv(key_id_d,(void*)&msgrecv_d,sizeof(struct msgbuf),TYPE_DEVICE,IPC_NOWAIT);
 		//printf("in main_proc msgrcv_d error!\n");
 		printf("msgrecv_d type : %d\n",msgrecv_d.msgtype);
 		printf("in main_proc msgrecv_d : %d, key press :%d\n",msgrecv_d.text[0],msgrecv_d.text[2]);
@@ -204,12 +206,12 @@ int main_proc()
 			}
 			printf("\n");
             
-			/*if(msgsnd(key_id_d,&msgrecv_d,sizeof(struct msgbuf)-sizeof(long),IPC_NOWAIT)==-1){
+			if(msgsnd(key_id_to_out_d,&msgrecv_d,sizeof(struct msgbuf)-sizeof(long),IPC_NOWAIT)==-1){
                 printf("in main_proc msgsnd_d error!\n");
             }
-			if(msgsnd(key_id_sw,&msgrecv_sw,sizeof(struct msgbuf)-sizeof(long),IPC_NOWAIT)==-1){
+			if(msgsnd(key_id_to_out_sw,&msgrecv_sw,sizeof(struct msgbuf)-sizeof(long),IPC_NOWAIT)==-1){
 				printf("in main_proc msgsnd_sw error!\n");
-			}*/
+			}
 			
 		}
 		printf("\n");
@@ -217,6 +219,8 @@ int main_proc()
 		memset(&msgrecv_sw,0,sizeof(struct msgbuf));
 		usleep(500000);
 	}
+    msgctl(key_id_d,IPC_RMID,NULL);
+	msgctl(key_id_sw,IPC_RMID,NULL);
 	return 0;
 }
 
@@ -226,20 +230,19 @@ int output_proc()
 
 	struct msgbuf msgrecv_sw, msgrecv_d;
 	int i;
-	key_t key_id_d = msgget((key_t)4000,IPC_CREAT|0666);
-	key_t key_id_sw = msgget((key_t)3000,IPC_CREAT|0666);
-	
+	key_id_from_main_d = msgget((key_t)MAIN_AND_OUT_D,IPC_CREAT|0666);
+    key_id_from_main_sw = msgget((key_t)MAIN_AND_OUT_SW,IPC_CREAT|0666);
 
 	while(1){
 	    memset(&msgrecv_d,0,sizeof(struct msgbuf));
-		if(msgrcv(key_id_d,&msgrecv_d,sizeof(struct msgbuf),1,IPC_NOWAIT)==-1){
+		if(msgrcv(key_id_from_main_d,&msgrecv_d,sizeof(struct msgbuf),TYPE_DEVICE,IPC_NOWAIT)==-1){
 			printf("in output msgrecv_d error!\n");
 		}
 		if(msgrecv_d.msgtype==TYPE_BACK)
 			break;
              
 	    memset(&msgrecv_sw,0,sizeof(struct msgbuf));
-		if(msgrcv(key_id_sw,&msgrecv_sw,sizeof(struct msgbuf),TYPE_SWITCH,IPC_NOWAIT)==-1){
+		if(msgrcv(key_id_from_main_sw,&msgrecv_sw,sizeof(struct msgbuf),TYPE_SWITCH,IPC_NOWAIT)==-1){
 			printf("in output msgrcv_sw error!\n");
 		}
 		//printf("in output_proc msgrcv_d : %d %d %d %d\n",msgrecv_d.msgtype,msgrecv_d.text[0],msgrecv_d.text[1],msgrecv_d.text[2]);
@@ -248,6 +251,7 @@ int output_proc()
 			printf(" %d",msgrecv_sw.text[i]);
 		}*/
 		printf("\n");
+        /* MODE 4 */
         if(msgrecv_d.text[1]==CLOCK){
             out_clock(msgrecv_sw);
         }
@@ -262,55 +266,88 @@ int output_proc()
 
 		usleep(500000);
 	}
+    close(fd_fnd);
+    msgctl(key_id_from_main_d,IPC_RMID,NULL);
+	msgctl(key_id_from_main_sw,IPC_RMID,NULL);
 	return 0;
 }
 
 int out_clock(struct msgbuf msgrecv_sw){
 	char fnd[4]={0,};
-	static int clock_edit=0, init=0;
-    int i;
+    unsigned char sum_sw;
+	static int change_toggle=0, init=0;
+    static clock_t c,t;
 	time_t present_time = time(NULL);
-	static struct tm *pre_t;
+	static struct tm *pre_t, *lat_t;
 	if(!init){
+        int fd_fnd = open(FND_DEVICE,O_RDWR);
 		pre_t = localtime(&present_time);
 		init =1;
 	}
+	if(fd_fnd<0) printf("FND device open error!\n");
     unsigned long *fpga_addr =0;
 	unsigned char *led_addr =0;
 
-    int fd_fnd = open(FND_DEVICE,O_RDWR);
-    int fd_led = open("/dev/mem",O_RDWR | O_SYNC);
-	if(fd_fnd<0) printf("FND device open error!\n");
-	if(fd_led<0) printf("LED device open error!\n");
-
     fpga_addr = (unsigned long*)mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fd_led, FPGA_BASE_ADDRESS); 
     led_addr = (unsigned char*)((void*)fpga_addr+LED_ADDR);	
-	*led_addr=128;
 
-    int sw_flag = 0;
-    for(i=0;i<MAX_SWITCH;i++){
-        if(msgrecv_sw.text[i]!=0){
-            sw_flag=1;
-            break;
+
+    sum_sw = check_sw(msgrecv_sw.text);
+    if(sum_sw==0 && change_toggle==0){// not switch 
+        present_time = time(NULL);
+		lat_t = localtime(&present_time);
+        if(lat_t->tm_sec - pre_t->tm_sec >= 1 || lat_t->tm_sec  - pre_t->tm_sec <=-1){ // later 1 sec
+            pre_t = lat_t;
         }
     }
-    //no sw input
-    if(sw_flag==0){
-        fnd[0]=pre_t->tm_hour/10;
-        fnd[1]=pre_t->tm_hour%10;
-        fnd[2]=pre_t->tm_min/10;
-        fnd[3]=pre_t->tm_min%10;
-        write(fd_fnd,&fnd,4);
+    if(sum_sw==256) {// switch 1 
+        change_toggle ^=1;
+        *led_addr=0;
     }
+
+    if(change_toggle){// edit mode
+        if(clock()-s>SEC){
+            if(flag==0){
+                *led_addr^=16;
+                flag=1;
+            }
+            else{
+                *led_addr^=48;
+            }
+            s =clock();
+        }
+
+        if(sum_sw==128){// switch 2
+            present_time = time(NULL);
+            pre_t = localtime(&present_time);
+        }
+        if(sum_sw==64){// switch 3
+            pre_t->tm_min += 1;
+        }
+        if(sum_sw==32){// switch 4
+            pre_t->tm_hour += 1;
+        }
+    }
+    fnd[0]=pre_t->tm_hour/10;
+    fnd[1]=pre_t->tm_hour%10;
+    fnd[2]=pre_t->tm_min/10;
+    fnd[3]=pre_t->tm_min%10;
     
-    //handle sw input
-    if(sw_flag==1){
-        if(msgrecv_sw.text[0]==1){
-		}
-
-    }
-        
-
-
+    write(fd_fnd,&fnd,4);
+    
 	return 0;
+}
+unsigned char check_sw(unsigned char sw[]){
+    int i;
+    unsigned char sum=0;
+    for(i=8;i>=0;i--){
+        if(sw[i]==1){
+            sum+=sw[i]*(1<<(8-i));
+        }
+    }
+    return sum;
+}
+int out_counter(struct msgbuf msgrecv_sw)
+{
+    return 0;
 }

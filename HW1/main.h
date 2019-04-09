@@ -36,6 +36,7 @@
 #define TYPE_VOL_UP 3
 #define TYPE_VOL_DOWN 4
 #define TYPE_SWITCH 5
+#define TYPE_DEVICE 1 
 
 #define KEY_RELEASE 0
 #define KEY_PRESS 1
@@ -59,8 +60,10 @@
 #define DELAY 30000
 #define SEC 26300
 
-#define IN_AND_MAIN 1000
-#define MAIN_AND_OUT 2000
+#define IN_AND_MAIN_D 1000
+#define IN_AND_MAIN_SW 2000
+#define MAIN_AND_OUT_D 3000
+#define MAIN_AND_OTU_SW 4000
 
 struct msgbuf{
 	long msgtype;
