@@ -108,6 +108,23 @@ int input_proc(){
 					printf("in input back\n");
 					msgsend.msgtype=1;
 					msgsend.text[0]=TYPE_BACK;
+					int fd_fnd = open(FND_DEVICE,O_RDWR);
+					int fd_led = open("/dev/mem",O_RDWR | O_SYNC);
+					//fd_lcd = open(LCD_DEVICE,O_WRONLY);
+					//fd_dot = open(DOT_DEVICE,O_WRONLY);
+					unsigned long *fpga_addr =0;
+					unsigned char *led_addr =0;
+					char fnd[4]={0,};
+					// led using mmap()
+					fpga_addr = (unsigned long*)mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fd_led, FPGA_BASE_ADDRESS); 
+					led_addr = (unsigned char*)((void*)fpga_addr+LED_ADDR);	
+					printf("1231231321321312312312312\n");
+					//*led_addr=0;
+					printf("1231231321321312312312312\n");
+					//write(fd_fnd,&fnd,4);
+					printf("1231231321321312312312312\n");
+					close(fd_fnd);
+					close(fd_led);
 					break;
 				}
 				else if(event[0].code == VOL_UP_KEY){
@@ -226,8 +243,6 @@ int main_proc()
 		memset(&msgrecv_sw,0,sizeof(struct msgbuf));
 		usleep(500000);
 	}
-
-    
 	return 0;
 }
 
@@ -237,10 +252,12 @@ int output_proc()
 
 	struct msgbuf msgrecv_sw, msgrecv_d;
 	int i;
-	unsigned char sw[MAX_SWITCH];
+	unsigned char sw[MAX_SWITCH], fnd[4]={0,};
 	int key_id_from_main_d = msgget((key_t)MAIN_AND_OUT_D,IPC_CREAT|0666);
     int key_id_from_main_sw = msgget((key_t)MAIN_AND_OUT_SW,IPC_CREAT|0666);
 	int fd_fnd, fd_led, fd_lcd, fd_dot, fd_mot;
+	
+	static int init_1=0,init_2=0,init_3=0,init_4=0,back_count=0;
     // use driver
 	fd_fnd = open(FND_DEVICE,O_RDWR);
 	fd_led = open("/dev/mem",O_RDWR | O_SYNC);
@@ -264,7 +281,13 @@ int output_proc()
              
 	    memset(&msgrecv_sw,0,sizeof(struct msgbuf));
 		if(msgrcv(key_id_from_main_sw,&msgrecv_sw,sizeof(struct msgbuf),TYPE_SWITCH,IPC_NOWAIT)==-1){
+			back_count++;
 			printf("in output msgrcv_sw error!\n");
+			if(back_count>=3){
+				*led_addr=0; 
+				write(fd_fnd,fnd,4);
+				break;
+			}
 		}
 		/*printf("in output_proc msgrcv_d : %d %d %d %d\n",msgrecv_d.msgtype,msgrecv_d.text[0],msgrecv_d.text[1],msgrecv_d.text[2]);
 		printf("in output_proc msgrcv_sw : ");
@@ -273,19 +296,21 @@ int output_proc()
 		}
 		printf("\n");*/
         /* MODE 4 */
-        if(msgrecv_d.text[1]==CLOCK){
+		for(i=0;i<MAX_SWITCH;i++){
+			sw[i]=msgrecv_sw.text[i];
+		}
+		if(msgrecv_d.text[1]==CLOCK){
+			if(!init_1){ *led_addr=0; write(fd_fnd,fnd,4); init_1=1;}
 		  	printf("start clock()\n");
-			for(i=0;i<MAX_SWITCH;i++){
-				sw[i]=msgrecv_sw.text[i];
-			}
-			printf("\n");
-
             out_clock(sw,fd_fnd,led_addr);
         }
         else if(msgrecv_d.text[1]==COUNTER){
+			if(!init_2){ *led_addr=0; write(fd_fnd,fnd,4); init_2=1;}
+			printf("start counter()\n");
 			out_counter(sw,fd_fnd,led_addr);
         }
         else if(msgrecv_d.text[1]==TEXT_EDITOR){
+			if(!init_3){ *led_addr=0; write(fd_fnd,fnd,4); init_3=1;}
             out_text_editor(sw,fd_fnd,fd_lcd,fd_dot,led_addr);
         }
         else if(msgrecv_d.text[1]==DRAW_BOARD){
@@ -314,7 +339,6 @@ int out_clock(unsigned char sw[],int fd_fnd, char* led_addr){
 		init =1;
 	}
 
-
 	printf("out clock : ");
 	for(i=0;i<MAX_SWITCH;i++){
 		printf("%d ",(int)sw[i]);
@@ -330,7 +354,7 @@ int out_clock(unsigned char sw[],int fd_fnd, char* led_addr){
 		
 		pre_t = localtime(&present_time);
 		//printf("lat_t sec : %d\n",lat_t->tm_sec);
-		printf("pre_t sec : %d\n",pre_t->tm_sec);
+		//printf("pre_t sec : %d\n",pre_t->tm_sec);
 		//int temp = pre_t->tm_sec;
 		
         /*if((lat_t->tm_sec - pre_t->tm_sec) >= 1 || (lat_t->tm_sec  - pre_t->tm_sec) <=-1){ // later 1 sec
@@ -402,12 +426,13 @@ int check_sw(unsigned char sw[]){
 }
 int out_counter(unsigned char sw[], int fd_fnd, char* led_addr)
 {
-    int i, sum_sw, t_mode=1;
-    char fnd[4]={0,};
-    static int init=0;
+	printf("out_counter\n");
+    int i, sum_sw;
+    static char fnd[4]={0,};
+    static int init=0,t_mode=1;
     int sum;
     sum_sw = check_sw(sw);
-
+	printf("sum_sw : %d\n",sum_sw);
     if(!init){
         //if(sum_sw == 0 && t_mode ==1){ // no input
             for(i=0;i<4;i++){
@@ -420,9 +445,11 @@ int out_counter(unsigned char sw[], int fd_fnd, char* led_addr)
     }
 
     if(sum_sw == 256){ // switch 1 => change jinsu
+		printf("jinsu trans\n");
         t_mode++;
         sum=0;
         if(t_mode==2){ // Dec to Otc
+			printf("88888888888888888\n");
             *led_addr = 32;
             sum+=fnd[1]*100; sum+=fnd[2]*10; sum+=fnd[3];
             fnd[0]=sum/512; sum%=512;
@@ -432,7 +459,8 @@ int out_counter(unsigned char sw[], int fd_fnd, char* led_addr)
             fnd[0]=0;
             
         }
-        else if(t_mode==3){ // Otc to Qua
+        else if(t_mode==3){ // Otc to Quai
+			printf("444444444444\n");
             *led_addr = 16;
             sum+=fnd[1]*64; sum+=fnd[2]*8; sum+=fnd[3];
             fnd[0]=sum/64; sum%=64;
@@ -459,7 +487,7 @@ int out_counter(unsigned char sw[], int fd_fnd, char* led_addr)
             fnd[3]=sum;
             fnd[0]=0;
         }
-    }
+    };
     if(t_mode==1){ // Decimal 
         if(sum_sw==128){ // switch 2
             fnd[1]++;
@@ -485,6 +513,7 @@ int out_counter(unsigned char sw[], int fd_fnd, char* led_addr)
         trim_number(fnd,8);
     }
     else if(t_mode==3){ // quadruple
+		printf("lllllllllllllllllll\n");
         if(sum_sw==128){ // switch 2
             fnd[1]++;
         }

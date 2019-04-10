@@ -76,7 +76,7 @@ int output_proc();
 int main_proc();
 int check_sw(unsigned char sw[]);
 int out_clock(unsigned char sw[],int fd_fnd,char* led_addr);
-int out_counter(struct msgbuf msgrecv_sw);
+int out_counter(unsigned char sw[],int fd_fnd, char* led_addr);
 int trim_number(char fnd[],int jinsu);
 int out_text_editor(unsigned char sw[], int fd_fnd, int fd_lcd, int fd_dot, char*);
 int out_draw_board(unsigned char sw[], int fd_fnd, int fd_dot);
