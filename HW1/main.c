@@ -101,6 +101,7 @@ int input_proc(){
 		{
 			if(event[0].value == KEY_PRESS){
 				if(event[0].code == BACK_KEY){
+					printf("dsdadsadasdsadsadsa\n");
 					msgctl(key_id_d,IPC_RMID,NULL);
 					msgctl(key_id_sw,IPC_RMID,NULL);
     				msgctl(key_id_to_out_d,IPC_RMID,NULL);
@@ -108,7 +109,7 @@ int input_proc(){
 					printf("in input back\n");
 					msgsend.msgtype=1;
 					msgsend.text[0]=TYPE_BACK;
-					int fd_fnd = open(FND_DEVICE,O_RDWR);
+					/*int fd_fnd = open(FND_DEVICE,O_RDWR);
 					int fd_led = open("/dev/mem",O_RDWR | O_SYNC);
 					//fd_lcd = open(LCD_DEVICE,O_WRONLY);
 					//fd_dot = open(DOT_DEVICE,O_WRONLY);
@@ -118,13 +119,11 @@ int input_proc(){
 					// led using mmap()
 					fpga_addr = (unsigned long*)mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fd_led, FPGA_BASE_ADDRESS); 
 					led_addr = (unsigned char*)((void*)fpga_addr+LED_ADDR);	
-					printf("1231231321321312312312312\n");
-					//*led_addr=0;
-					printf("1231231321321312312312312\n");
+					// *led_addr=0;
 					//write(fd_fnd,&fnd,4);
-					printf("1231231321321312312312312\n");
-					close(fd_fnd);
-					close(fd_led);
+					printf("1231231321321312312312312\n");*/
+					//close(fd_fnd);
+					//close(fd_led);
 					break;
 				}
 				else if(event[0].code == VOL_UP_KEY){
@@ -327,9 +326,9 @@ int output_proc()
 int out_clock(unsigned char sw[],int fd_fnd, char* led_addr){
 
 	char fnd[4]={0,};
-	static int change_toggle=0, init=0,led_flag=0,flag=0;
+	static int change_toggle=0, init=0,led_flag=0,flag=0,min=0,hour=0,sec=0,t_hour,t_min;
     static clock_t s,t;
-	time_t present_time = time(NULL);
+	time_t present_time=time(NULL);
 	
 	
 	static struct tm *pre_t, *lat_t;
@@ -348,19 +347,9 @@ int out_clock(unsigned char sw[],int fd_fnd, char* led_addr){
 	printf("sum_sw1 : %d \n",sum_sw);
 	
     if(sum_sw==0 && change_toggle==0){// not switch
-		//int temp1 = pre_t->tm_sec;
-		//printf("temp : %d\n",temp1);
         present_time = time(NULL);
 		
 		pre_t = localtime(&present_time);
-		//printf("lat_t sec : %d\n",lat_t->tm_sec);
-		//printf("pre_t sec : %d\n",pre_t->tm_sec);
-		//int temp = pre_t->tm_sec;
-		
-        /*if((lat_t->tm_sec - pre_t->tm_sec) >= 1 || (lat_t->tm_sec  - pre_t->tm_sec) <=-1){ // later 1 sec
-            pre_t = lat_t;
-			printf("sec %d\n",pre_t->tm_sec);
-        }*/
 		if(!led_flag){
 			*led_addr = 128;
 			s=clock();
@@ -379,9 +368,12 @@ int out_clock(unsigned char sw[],int fd_fnd, char* led_addr){
         }
 		else{
 			*led_addr=128;
+			flag=0;
 		}
     }
     if(change_toggle){// edit mode
+		t_hour = pre_t->tm_hour;
+		t_min = pre_t->tm_min;
         if(clock()-s>SEC){
             if(flag==0){
                 *led_addr^=16;
@@ -396,22 +388,31 @@ int out_clock(unsigned char sw[],int fd_fnd, char* led_addr){
         if(sum_sw==128){// switch 2
             present_time = time(NULL);
             pre_t = localtime(&present_time);
+			t_min = pre_t->tm_min; min=0;
+			t_hour = pre_t->tm_hour; hour=0;
         }
         if(sum_sw==64){// switch 3
 			printf("min++\n");
-            pre_t->tm_min += 1;
+            min += 1;
+			if(t_min+min==60) { min=-t_min; hour++;}
         }
         if(sum_sw==32){// switch 4
 			printf("hour++\n");
-            pre_t->tm_hour += 1;
+            hour += 1;
+			if(t_hour+hour==25) hour=-t_hour;
         }
-    }
-    fnd[0]=pre_t->tm_hour/10;
-    fnd[1]=pre_t->tm_hour%10;
-    fnd[2]=pre_t->tm_min/10;
-    fnd[3]=pre_t->tm_min%10;
-    
-    write(fd_fnd,&fnd,4);
+		fnd[0]=(t_hour+hour)/10;
+		fnd[1]=(t_hour+hour)%10;
+		fnd[2]=(t_min+min)/10;
+		fnd[3]=(t_min+min)%10;
+		write(fd_fnd,&fnd,4);
+		return 0;
+	}
+	fnd[0]=(pre_t->tm_hour+hour)/10;
+	fnd[1]=(pre_t->tm_hour+hour)%10;
+	fnd[2]=(pre_t->tm_min+min)/10;
+	fnd[3]=(pre_t->tm_min+min)%10;
+	write(fd_fnd,&fnd,4);
 	return 0;
 }
 int check_sw(unsigned char sw[]){
@@ -449,7 +450,6 @@ int out_counter(unsigned char sw[], int fd_fnd, char* led_addr)
         t_mode++;
         sum=0;
         if(t_mode==2){ // Dec to Otc
-			printf("88888888888888888\n");
             *led_addr = 32;
             sum+=fnd[1]*100; sum+=fnd[2]*10; sum+=fnd[3];
             fnd[0]=sum/512; sum%=512;
@@ -460,7 +460,6 @@ int out_counter(unsigned char sw[], int fd_fnd, char* led_addr)
             
         }
         else if(t_mode==3){ // Otc to Quai
-			printf("444444444444\n");
             *led_addr = 16;
             sum+=fnd[1]*64; sum+=fnd[2]*8; sum+=fnd[3];
             fnd[0]=sum/64; sum%=64;
@@ -513,7 +512,6 @@ int out_counter(unsigned char sw[], int fd_fnd, char* led_addr)
         trim_number(fnd,8);
     }
     else if(t_mode==3){ // quadruple
-		printf("lllllllllllllllllll\n");
         if(sum_sw==128){ // switch 2
             fnd[1]++;
         }
@@ -552,8 +550,7 @@ int trim_number(char fnd[],int jinsu){
     return 0;
 }
 int out_text_editor(unsigned char sw[], int fd_fnd, int fd_lcd, int fd_dot, char* led_addr){
-    int i, sum_sw,count_0=0,count_num=0,flag=0;
-    
+    int i, sum_sw,count_0=0,count_num=0,flag=0,temp,temp_idx;
     static int sw_count[9]={0,};
     static int init=0, p_mode=0, cursor, pre_sum_sw[5000], pre_button_num=0;
     static char fnd[4]={0,};
@@ -562,11 +559,15 @@ int out_text_editor(unsigned char sw[], int fd_fnd, int fd_lcd, int fd_dot, char
     unsigned char dot[2][10]={{0x1c,0x36,0x63,0x63,0x63,0x7f,0x7f,0x63,0x63,0x63},
                     {0x0c,0x1c,0x1c,0x0c,0x0c,0x0c,0x0c,0x0c,0x0c,0x1e}};
     if(!init){
+		for(i=0;i<32;i++){
+			lcd[i]=' ';
+		}
         write(fd_fnd,&fnd,4);
         write(fd_lcd,&lcd,32);
         cursor=0;
-        pre_sum_sw=0;
+        pre_sum_sw[0]=0;
         *led_addr=0;
+		init=1;
     }
 
     sum_sw = check_sw(sw);
@@ -603,100 +604,110 @@ int out_text_editor(unsigned char sw[], int fd_fnd, int fd_lcd, int fd_dot, char
         
     }
     else if(sum_sw==256){ // switch 1
-        if(p_mode==0){
-            if( pre_sum_sw[pre_button_num] == 256 ){ // same with pre_input
-                // check if cotinue to press button or not
-                for(i=pre_button_num-1;i>=0;i--){
-                    if(pre_sum_sw[i]!=0){
-                        int temp = pre_sum_sw;
-                        int temp_idx = i;
-                        flag=1;
-                        break;
-                    }
-                }
-                if(flag){// if exist previous input without 0
-                    if(temp == pre_sum_sw){ // previous input (without 0) == sum_sw
-                        if(pre_button_num - temp_idx>1){
-                            if(cursor!=0) cursor--;
-                            sw_count[0]++;
-                            if(sw_count[0]==3) sw_count[0]=0; 
-                            lcd[cursor]=text[0][sw_count[0]];
-                            cursor++;
-                        }
-                        else{ //
-                            ;
-                        }
-                    }
-                    else{ // previous input(without 0) != sum_sw
-                        sw_count[0]=0;
-                        if(cursor==8){
-                            for(i=0;i<8;i++){
-                                lcd[i]=lcd[i+1];
-                            }
-                            cursor--;
-                            lcd[cursor]=text[0][sw_count[0]];
-                            cursor++;
-                        }
-                        lcd[cursor]=text[0][sw_count[0]];
-                        cursor++;
-                    }
-                }
-                else{ // if previous input is all zero
-                    sw_count[0]=0;
-                    if(cursor==8){
-                        for(i=0;i<8;i++){
-                            lcd[i]=lcd[i+1];
-                        }
-                        lcd[cursor]=text[0][sw_count[0]];
-                        cursor++;
-                    }
-                }
-            }
-        }
-        else if(p_mode==1){ // present number
-            if(cursor==8){
-                for(i=0;i<8;i++){
-                    lcd[i]=lcd[i+1];
-                }
-                cursor--;
-                lcd[cursor]='1';
-                cursor++;
-            }
-            else{
-                lcd[cursor]='1';
-                cursor++;
-            }
-        }
+		printf("cursor1 : %d\n",cursor);
+		print_lcd(0,p_mode,pre_sum_sw,pre_button_num,&cursor,text,sw_count,lcd,sum_sw);
+		printf("cursor2 : %d\n",cursor);
+		for(i=0;i<8;i++)
+			printf("%c",lcd[i]);
+		printf("\n");
     }
     else if(sum_sw==128){ // switch 2
+		print_lcd(1,p_mode,pre_sum_sw,pre_button_num,&cursor,text,sw_count,lcd,sum_sw);
     }
     else if(sum_sw==64){ // switch 3
+		print_lcd(2,p_mode,pre_sum_sw,pre_button_num,&cursor,text,sw_count,lcd,sum_sw);
     }
-    else if(sum_sw==32){ // switch 4
+    else if(sum_sw==32){ // switch 4		
+		print_lcd(3,p_mode,pre_sum_sw,pre_button_num,&cursor,text,sw_count,lcd,sum_sw);
     }
     else if(sum_sw==16){ // switch 5
+		print_lcd(4,p_mode,pre_sum_sw,pre_button_num,&cursor,text,sw_count,lcd,sum_sw);
     }
     else if(sum_sw==8){ // switch 6
+		print_lcd(5,p_mode,pre_sum_sw,pre_button_num,&cursor,text,sw_count,lcd,sum_sw);
     }
     else if(sum_sw==4){ // switch 7
+		print_lcd(6,p_mode,pre_sum_sw,pre_button_num,&cursor,text,sw_count,lcd,sum_sw);
     }
     else if(sum_sw==2){ // switch 8
+		print_lcd(7,p_mode,pre_sum_sw,pre_button_num,&cursor,text,sw_count,lcd,sum_sw);
     }
     else if(sum_sw==1){ // switch 9
-    }
-    if(cursor>=8){
-        cursor--;
-        for(i=0;i<8;i++){
-            lcd[i]=lcd[i+1];
-        }
-    }
-    
-    pre_sum_sw[++pre_button_num] = sum_sw;
-    
-    write(fd_dot,dot[p_mode],10);
-    write(fd_fnd,&fnd,4);
-    write(fd_lcd,lcd,8);
-    return 0;
+		print_lcd(8,p_mode,pre_sum_sw,pre_button_num,&cursor,text,sw_count,lcd,sum_sw);
+	}
+
+	pre_sum_sw[++pre_button_num] = sum_sw;
+
+	write(fd_dot,dot[p_mode],10);
+	write(fd_fnd,&fnd,4);
+	write(fd_lcd,lcd,8);
+	return 0;
+}
+int print_lcd(int key,int p_mode,int pre_sum_sw[],int pre_button_num,int *cursor, char* text[MAX_SWITCH],int sw_count[],unsigned char lcd[],int sum_sw){
+	int i,temp,temp_idx,flag=0;
+	if(p_mode==0){
+		// check if cotinue to press button or not
+		for(i=pre_button_num;i>=0;i--){
+			if(pre_sum_sw[i]!=0){
+				temp = pre_sum_sw[i];
+				temp_idx = i;
+				flag=1;
+				break;
+			}
+		}
+		if(flag){// if exist latest sum_sw (without 0)
+			if(temp == sum_sw){ // previous input (without 0) == sum_sw
+				if(pre_button_num - temp_idx>1){
+					if((*cursor)!=0) (*cursor)--;
+					sw_count[key]++;
+					if(sw_count[key]==3) sw_count[key]=0; 
+					/*if((*cursor) ==8){
+						for(i=0;i<8;i++){
+							lcd[i]=lcd[i+1];
+						}
+					}*/
+					(*cursor)--;
+					lcd[*cursor]=text[key][sw_count[key]];
+					(*cursor)++;
+				}
+					/*else{ //
+						++;
+					}*/
+			}
+			else{ // latest input (without 0) != sum_sw
+				sw_count[key]=0;
+				if((*cursor)==8){
+					for(i=0;i<8;i++){
+						lcd[i]=lcd[i+1];
+					}
+					(*cursor)--;
+					lcd[*cursor]=text[key][sw_count[key]];
+					(*cursor)++;
+				}
+				lcd[(*cursor)]=text[key][sw_count[key]];
+				(*cursor)++;
+			}
+			else{ // if previous inputs are all zero
+				lcd[*cursor]=text[key][sw_count[key]];
+				(*cursor)++;
+			}
+		}
+	}
+	else if(p_mode==1){ // present number
+		if((*cursor)==8){
+			for(i=0;i<8;i++){
+				lcd[i]=lcd[i+1];
+			}
+			(*cursor)--;
+			lcd[*cursor]='1'+key;
+			(*cursor)++;
+		}
+		else{
+			lcd[*cursor]='1'+key;
+			(*cursor)++;
+		}
+	}
+	return 0;
 }
 int out_draw_board(unsigned char sw[], int fd_fnd, int fd_dot)
 {
@@ -705,83 +716,84 @@ int out_draw_board(unsigned char sw[], int fd_fnd, int fd_dot)
     static clock_t t;
     static int init=0, p_mode=0, pre_sum_sw, cursor_row=0, cursor_col=0,flicker;
     static int select[10][7]={0,};
-    static char fnd[4]={0,};
-    static unsigned char dot[10]={0,};
-    if(!init){
-        for(i=0;i<4;i++){
-            fnd[i]=0;
-        }
-        dot[0]=0x40;
-        t = clock();
-        write(fd_fnd,&fnd,4);
-        write(fd_dot,dot,10);
-        pre_sum_sw=-1;
-        flicker=1;
-    }
-    sum_sw = check_sw(sw); // calculate input sw
-    // cursor off
-    if(flicker){
-        if(clock()-t>=450){
-            if(!select[cursor_row][cursor_col]){ // if not selected
-                dot[cursor_row] -= (0x40)>> cursor_col; // cursor dot off!
-                write(fd_dot,dot,10);
-            }
-        }
-    }
+	static char fnd[4]={0,};
+	static unsigned char dot[10]={0,};
+	if(!init){
+		for(i=0;i<4;i++){
+			fnd[i]=0;
+		}
+		dot[0]=0x40;
+		t = clock();
+		write(fd_fnd,&fnd,4);
+		write(fd_dot,dot,10);
+		pre_sum_sw=-1;
+		flicker=1;
+	}
+	sum_sw = check_sw(sw); // calculate input sw
+	// cursor off
+	if(flicker){
+		if(clock()-t>=450){
+			if(!select[cursor_row][cursor_col]){ // if not selected
+				dot[cursor_row] -= (0x40)>> cursor_col; // cursor dot off!
+				write(fd_dot,dot,10);
+			}
+		}
+	}
 
-    if(sum_sw >0){ // fnd count ++
-        fnd[3]++;
-        if(fnd[3]>=10){ fnd[3]=0; fnd[2]++;}
-        if(fnd[2]>=10){ fnd[2]=0; fnd[1]++;}
-        if(fnd[1]>=10){ fnd[1]=0; fnd[0]++;}
-        if(fnd[0]>=10){ fnd[0]=0; }
-    }
+	if(sum_sw >0){ // fnd count ++
+		fnd[3]++;
+		if(fnd[3]>=10){ fnd[3]=0; fnd[2]++;}
+		if(fnd[2]>=10){ fnd[2]=0; fnd[1]++;}
+		if(fnd[1]>=10){ fnd[1]=0; fnd[0]++;}
+		if(fnd[0]>=10){ fnd[0]=0; }
+	}
 
-    
-    if(sum_sw==256){ // switch 1  => reset
-        for(i=0;i<10;i++){
-            dot[i]=0x0;
-        }
-    }
-    else if(sum_sw==128){ // switch 2  => up
-        cursor_row--;
-        if(cursor_row<0) cursor_row=0;
-        dot[cursor_row] |= (0x40>>cursor_col);
-    }
-    else if(sum_sw==64){ // switch 3  =>  cursor
-        flicker =0;
-        dot[cursor_row] |= (0x40>>cursor_col);
-    }
-    else if(sum_sw==32){ // switch 4  => left
-        cursor_col--;
-        if(cursor_col<0) cursor_col=0;
-        dot[cursor_row] |= (0x40>>cursor_col);
-    }
-    else if(sum_sw==16){ // switch 5  => select
-        dot[cursor_row] |= (0x40>>cursor_col);
-        select[cursor_row][cursor_col]=1;
-    }
-    else if(sum_sw==8){ // switch 6  => right
-        cursor_col++;
-        if(cursor_col>6) cursor_col=6;
-        dot[cursor_row] |= (0x40>>cursor_col);
-    }
-    else if(sum_sw==4){ // switch 7  => clear
-        for(i=0;i<10;i++){
-            dot[i]=0x00;
-        }
-        dot[cursor_row] |= (0x40>>cursor_col);
-    }
-    else if(sum_sw==2){ // switch 8  => down
-        cursor_row++;
-        if(cursor_row>9) cursor_row=9;
-        dot[cursor_row] |= (0x40>>cursor_col);
-    }
-    else if(sum_sw==1){ // switch 9  => reverse
-    }
 
-    write(fd_fnd,fnd,4);
-    write(fd_dot,dot,10);
-    t=clock();
-    return 0;
+	if(sum_sw==256){ // switch 1  => reset
+		for(i=0;i<10;i++){
+			dot[i]=0x0;
+		}
+	}
+	else if(sum_sw==128){ // switch 2  => up
+		cursor_row--;
+		if(cursor_row<0) cursor_row=0;
+		dot[cursor_row] |= (0x40>>cursor_col);
+	}
+	else if(sum_sw==64){ // switch 3  =>  cursor
+		flicker =0;
+		dot[cursor_row] |= (0x40>>cursor_col);
+	}
+	else if(sum_sw==32){ // switch 4  => left
+		cursor_col--;
+		if(cursor_col<0) cursor_col=0;
+		dot[cursor_row] |= (0x40>>cursor_col);
+	}
+	else if(sum_sw==16){ // switch 5  => select
+		dot[cursor_row] |= (0x40>>cursor_col);
+		select[cursor_row][cursor_col]=1;
+	}
+	else if(sum_sw==8){ // switch 6  => right
+		cursor_col++;
+		if(cursor_col>6) cursor_col=6;
+		dot[cursor_row] |= (0x40>>cursor_col);
+	}
+	else if(sum_sw==4){ // switch 7  => clear
+		for(i=0;i<10;i++){
+			dot[i]=0x00;
+		}
+		dot[cursor_row] |= (0x40>>cursor_col);
+	}
+	else if(sum_sw==2){ // switch 8  => down
+		cursor_row++;
+		if(cursor_row>9) cursor_row=9;
+		dot[cursor_row] |= (0x40>>cursor_col);
+	}
+	else if(sum_sw==1){ // switch 9  => reverse
+	}
+
+	write(fd_fnd,fnd,4);
+	write(fd_dot,dot,10);
+	t=clock();
+	return 0;
 }
+
