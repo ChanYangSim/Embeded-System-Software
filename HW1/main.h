@@ -58,7 +58,6 @@
 #define MAX_SWITCH 9
 #define MAX_LCD 32
 #define DELAY 30000
-#define SEC 400
 
 #define IN_AND_MAIN_D 8000
 #define IN_AND_MAIN_SW 2000

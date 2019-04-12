@@ -4,63 +4,27 @@ int main(int argc, char *argv[])
 	int status; 
 	pid_t pid_in=0,pid_out=0;
 	key_t key=0;
-
 	/* input process fork */ 
 	pid_in = fork();
-    if(pid_in>0)
-    {
+    if(pid_in>0){
+		/* output process fork */
         pid_out = fork();
         if(pid_out>0)
             main_proc();
         else
             output_proc();
     }
-    else
-    {
+    else{
         input_proc();
     }
     return 0;
-
-	/*if(pid_in==0){
-		input_proc();
-	}
-	else{
-		pid_out=fork();
-		if(pid_out==0){
-			output_proc();
-		}
-		else{
-			main_proc();
-			wait(&status);
-		}
-		wait(&status);
-	}
-	return 0;*/
-
-	/*if(pid_in){//main process 
-		pid_out = fork();
-		if(pid_out<0)
-			printf("fork faulure\n");
-	}
-	
-		pid_out=-1;
-		input_proc();
-	}
-	if(pid_out==0){//output process
-		output_proc();
-		wait(&status);
-	}
-	if(pid_in!=0 && pid_out!=0){//main process
-		main_proc();
-		wait(&status);
-	}*/
 }
 int input_proc(){
 	printf("In input_proc..\n");
 	int fd_device, fd_switch;
 	int val,i;
-	struct input_event event[BUF_SIZE];
-	int size_ev = sizeof(struct input_event);
+	struct input_event event[BUF_SIZE]; // event structure
+	int size_ev = sizeof(struct input_event); 
 	struct msgbuf msgsend, msgrecv, msgsend2;
 	key_t key_id_d, key_id_sw;
 	/*  open key device  */
@@ -79,54 +43,38 @@ int input_proc(){
 	unsigned char prev_sw[MAX_SWITCH];
 	unsigned char output_sw[MAX_SWITCH];
 	int size_sw = sizeof(sw);
-	memset(sw,0,size_sw); memset(prev_sw,0,size_sw); memset(output_sw,0,size_sw);
+	memset(sw,0,size_sw); memset(prev_sw,0,size_sw); memset(output_sw,0,size_sw); // initialize input variable
 
 	(void)signal(SIGINT,user_signal1);
-	
+	/* get message queue id */
 	key_id_d = msgget((key_t)IN_AND_MAIN_D,IPC_CREAT|0666);
 	key_id_sw = msgget((key_t)IN_AND_MAIN_SW,IPC_CREAT|0666);
 	int key_id_to_out_d = msgget((key_t)MAIN_AND_OUT_D,IPC_CREAT|0666);
     int key_id_to_out_sw = msgget((key_t)MAIN_AND_OUT_SW,IPC_CREAT|0666);
 	
-	printf("%d %d\n",key_id_d,key_id_sw);
     int mode=1;
 	while(1)
 	{
-		//printf("%d %d\n",key_id_d,key_id_sw);
 		memset(&msgsend,0,sizeof(struct msgbuf));
 		msgsend.msgtype=1;
         msgsend.text[1]=mode;
-		int read_d = read(fd_device, event, size_ev * BUF_SIZE);
+		// text[1] == board mode
+		int read_d = read(fd_device, event, size_ev * BUF_SIZE); //read from board
 		if(read_d >= sizeof(event[0]))
 		{
 			if(event[0].value == KEY_PRESS){
-				if(event[0].code == BACK_KEY){
+				if(event[0].code == BACK_KEY){ // BACK => terminate 
+					/* message queue delete */
 					msgctl(key_id_d,IPC_RMID,NULL);
 					msgctl(key_id_sw,IPC_RMID,NULL);
     				msgctl(key_id_to_out_d,IPC_RMID,NULL);
     				msgctl(key_id_to_out_sw,IPC_RMID,NULL);
-					printf("in input back\n");
+					printf("Bye Bye\n");
 					msgsend.msgtype=1;
 					msgsend.text[0]=TYPE_BACK;
-					/*int fd_fnd = open(FND_DEVICE,O_RDWR);
-					int fd_led = open("/dev/mem",O_RDWR | O_SYNC);
-					//fd_lcd = open(LCD_DEVICE,O_WRONLY);
-					//fd_dot = open(DOT_DEVICE,O_WRONLY);
-					unsigned long *fpga_addr =0;
-					unsigned char *led_addr =0;
-					char fnd[4]={0,};
-					// led using mmap()
-					fpga_addr = (unsigned long*)mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fd_led, FPGA_BASE_ADDRESS); 
-					led_addr = (unsigned char*)((void*)fpga_addr+LED_ADDR);	
-					// *led_addr=0;
-					//write(fd_fnd,&fnd,4);
-					printf("1231231321321312312312312\n");*/
-					//close(fd_fnd);
-					//close(fd_led);
 					break;
 				}
-				else if(event[0].code == VOL_UP_KEY){
-					printf("in input upup\n");
+				else if(event[0].code == VOL_UP_KEY){ // VOL+ 
 					msgsend.msgtype=1;
                     msgsend.text[0]=TYPE_VOL_UP;
 					msgsend.text[2]=mode;
@@ -135,8 +83,7 @@ int input_proc(){
                         mode=1;
 					msgsend.text[1]=mode;
 				}
-				else if(event[0].code == VOL_DOWN_KEY){
-					printf("in input down\n");
+				else if(event[0].code == VOL_DOWN_KEY){ // VOL-
 					msgsend.msgtype=1;
                     msgsend.text[0]=TYPE_VOL_DOWN;
 					msgsend.text[2]=mode;
@@ -146,10 +93,8 @@ int input_proc(){
 					msgsend.text[1]=mode;
 				}
 				memset(&event[0],0,sizeof(event[0]));
-				//event[0].value=KEY_RELEASE;	
 			}
 		}
-		//printf("in input_proc msgrcv_d : %d %d %d %d\n",msgrecv_d.msgtype,msgrecv_d.text[0],msgrecv_d.text[1],msgrecv_d.text[2]);
 		if(msgsnd(key_id_d,&msgsend,sizeof(struct msgbuf)-sizeof(long),IPC_NOWAIT)==-1)
 			printf("in input_proc msgsnd_d error!\n");
 
@@ -161,20 +106,17 @@ int input_proc(){
 		}
 		memset(&msgsend2,0,sizeof(struct msgbuf));
 		msgsend2.msgtype=TYPE_SWITCH;
-	//	printf(">>IN INPUTPROCESS : ");
-		for(i=0;i<MAX_SWITCH;i++){
-			//printf("[%d] ",sw[i]);
+		for(i=0;i<MAX_SWITCH;i++){ // store switch info at sw[]
 			msgsend2.text[i] = sw[i];
 		}
 		printf("\n\n");
 		if(msgsnd(key_id_sw,&msgsend2,sizeof(struct msgbuf)-sizeof(long),IPC_NOWAIT)==-1){
 			printf("\nin input_proc msgsnd_sw error!\n");
 		}
-		//memset(&msgsend2,0,sizeof(struct msgbuf));
-		//memset(&msgsend,0,sizeof(struct msgbuf));
-		usleep(500000);
+		usleep(500000); // slow down for read speed
 	}
-	close(fd_device);
+	// close device
+	close(fd_device); 
 	close(fd_switch);
 	usleep(10000000);
 
@@ -192,45 +134,24 @@ int main_proc()
 	key_id_sw = msgget((key_t)IN_AND_MAIN_SW,IPC_CREAT|0666);
     key_id_to_out_d = msgget((key_t)MAIN_AND_OUT_D,IPC_CREAT|0666);
     key_id_to_out_sw = msgget((key_t)MAIN_AND_OUT_SW,IPC_CREAT|0666);
-   	printf("%d %d %d %d \n",key_id_d,key_id_sw,key_id_to_out_d,key_id_to_out_sw); 
 	while(1){
-		//memset(&msgrecv_d,0,sizeof(struct msgbuf));
-		msgrcv(key_id_d,(void*)&msgrecv_d,sizeof(struct msgbuf),TYPE_DEVICE,IPC_NOWAIT);
-		//printf("in main_proc msgrcv_d error!\n");
-		//printf("in main_proc msgrecv_d : %d, key press :%d\n",msgrecv_d.text[0],msgrecv_d.text[2]);
+		msgrcv(key_id_d,(void*)&msgrecv_d,sizeof(struct msgbuf),TYPE_DEVICE,IPC_NOWAIT); // recieve from message queue 
+		
+        if(msgrecv_d.text[0]==TYPE_BACK){ // terminate
+            printf("in main_proc back!\n");
+            break;
+        }
 
-		if(msgrecv_d.text[2]>0){
-			/* mode change */
-			if(msgrecv_d.text[0] == TYPE_VOL_UP){
-				//printf("in main vol_up\n");
-
-			}
-			if(msgrecv_d.text[0] == TYPE_VOL_DOWN){
-				//printf("in main vol_down\n");
-			}
-			/* terminate */
-			if(msgrecv_d.text[0]==TYPE_BACK){
-				printf("in main_proc back!\n");
-				break;
-			}
-
-		}
-		//printf("in main_proc msgrcv_d : %d %d %d %d\n",msgrecv_d.msgtype,msgrecv_d.text[0],msgrecv_d.text[1],msgrecv_d.text[2]);
-        
-	    memset(&msgrecv_sw,0,sizeof(struct msgbuf));
+        memset(&msgrecv_sw,0,sizeof(struct msgbuf));
 		if((msgrcv(key_id_sw,(void*)&msgrecv_sw,sizeof(struct msgbuf),TYPE_SWITCH,IPC_NOWAIT))==-1)
 			printf("in main_proc msgrcv_sw error!\n");
 	
-		if(msgrecv_sw.msgtype==TYPE_SWITCH){
-	/*		printf(">>IN MAIN PROCESS : ");
-			for(i=0;i<MAX_SWITCH;i++){
-				printf("%d ",msgrecv_sw.text[i]);
-			}
-			printf("\n");*/
-            
+		if(msgrecv_sw.msgtype==TYPE_SWITCH){ // get type of message is SWITCH
+            // message send to output process
 			if(msgsnd(key_id_to_out_d,&msgrecv_d,sizeof(struct msgbuf)-sizeof(long),IPC_NOWAIT)==-1){
                 printf("in main_proc msgsnd_d error!\n");
-            }
+			}
+            
 			if(msgsnd(key_id_to_out_sw,&msgrecv_sw,sizeof(struct msgbuf)-sizeof(long),IPC_NOWAIT)==-1){
 				printf("in main_proc msgsnd_sw error!\n");
 			}
@@ -257,7 +178,7 @@ int output_proc()
 	int fd_fnd, fd_led, fd_lcd, fd_dot, fd_mot;
 	unsigned char lcd[32],dot[10]={0,}; memset(lcd,' ',8);
 	static int init_1=0,init_2=0,init_3=0,init_4=0,back_count=0;
-    // use driver
+    // driver open and setting 
 	fd_fnd = open(FND_DEVICE,O_RDWR);
 	fd_led = open("/dev/mem",O_RDWR | O_SYNC);
     fd_lcd = open(LCD_DEVICE,O_WRONLY);
@@ -272,19 +193,21 @@ int output_proc()
 
 	while(1){
 	    memset(&msgrecv_d,0,sizeof(struct msgbuf));
+        // message queue of type_device received
 		if(msgrcv(key_id_from_main_d,&msgrecv_d,sizeof(struct msgbuf),TYPE_DEVICE,IPC_NOWAIT)==-1){
 			printf("in output msgrecv_d error!\n");
 		}
-		if(msgrecv_d.text[0]==TYPE_BACK){
+		if(msgrecv_d.text[0]==TYPE_BACK){ // terminate
 			printf("out_proc back!!\n");
 			break;
 		}
              
 	    memset(&msgrecv_sw,0,sizeof(struct msgbuf));
+        // message queue of type_switch received
 		if(msgrcv(key_id_from_main_sw,&msgrecv_sw,sizeof(struct msgbuf),TYPE_SWITCH,IPC_NOWAIT)==-1){
 			back_count++;
 			printf("in output msgrcv_sw error!\n");
-			if(back_count>=3){
+			if(back_count>=3){ // if 3 more error then setting device zero and break => terminate
 				*led_addr=0; 
 				write(fd_fnd,fnd,4);
 				write(fd_lcd,lcd,8);
@@ -292,31 +215,29 @@ int output_proc()
 				break;
 			}
 		}
-        /* MODE 4 */
+        /* FUNCTION by MODE */
 		for(i=0;i<MAX_SWITCH;i++){
 			sw[i]=msgrecv_sw.text[i];
 		}
-		if(msgrecv_d.text[1]==CLOCK){
-			if(CLOCK != pre_mode){*led_addr=0; write(fd_fnd,fnd,4); write(fd_lcd,lcd,8); write(fd_dot,dot,10);}
-		  	printf("start clock()\n");
+		if(msgrecv_d.text[1]==CLOCK){ // MODE == 1
+			if(CLOCK != pre_mode){*led_addr=0; write(fd_fnd,fnd,4); write(fd_lcd,lcd,8); write(fd_dot,dot,10);}// if change mode then initialize
             out_clock(sw,fd_fnd,led_addr);
         }
-        else if(msgrecv_d.text[1]==COUNTER){
-			if(COUNTER != pre_mode){*led_addr=64; write(fd_fnd,fnd,4); write(fd_lcd,lcd,8); write(fd_dot,dot,10);}
-			printf("start counter()\n");
+        else if(msgrecv_d.text[1]==COUNTER){ // MODE == 2
+			if(COUNTER != pre_mode){*led_addr=64; write(fd_fnd,fnd,4); write(fd_lcd,lcd,8); write(fd_dot,dot,10);} // if change mode then initialize
 			out_counter(sw,fd_fnd,led_addr);
         }
-        else if(msgrecv_d.text[1]==TEXT_EDITOR){
-			 if(TEXT_EDITOR != pre_mode){*led_addr=0;write(fd_fnd,fnd,4);write(fd_lcd,lcd,8); write(fd_dot,dot,10);}
+        else if(msgrecv_d.text[1]==TEXT_EDITOR){ // MODE == 3
+			 if(TEXT_EDITOR != pre_mode){*led_addr=0;write(fd_fnd,fnd,4);write(fd_lcd,lcd,8); write(fd_dot,dot,10);} // if change mode then initialize
             out_text_editor(sw,fd_fnd,fd_lcd,fd_dot,led_addr);
         }
-        else if(msgrecv_d.text[1]==DRAW_BOARD){
-			if(DRAW_BOARD != pre_mode){*led_addr=0; write(fd_fnd,fnd,4);write(fd_lcd,lcd,8); write(fd_dot,dot,10);}
+        else if(msgrecv_d.text[1]==DRAW_BOARD){ // MODE == 4
+			if(DRAW_BOARD != pre_mode){*led_addr=0; write(fd_fnd,fnd,4);write(fd_lcd,lcd,8); write(fd_dot,dot,10);} // if change mode then initialize
 			out_draw_board(sw,fd_fnd,fd_dot);
         }
-        else if(msgrecv_d.text[1]==EXTRA){
+        else if(msgrecv_d.text[1]==EXTRA){ // MODE == 5
         }
-		pre_mode=msgrecv_d.text[1];
+		pre_mode=msgrecv_d.text[1]; // store latest mode
 		usleep(500000);
 	}
     //close(fd_fnd);
@@ -328,25 +249,17 @@ int out_clock(unsigned char sw[],int fd_fnd, char* led_addr){
 	char fnd[4]={0,};
 	static int change_toggle=0, init=0,led_flag=0,flag=0,min=0,hour=0,sec=0,t_hour,t_min;
     static clock_t s,t;
-	time_t present_time=time(NULL);
-	
+	time_t present_time=time(NULL); // present time stamp 
 	
 	static struct tm *pre_t, *lat_t;
 	int sum_sw,i;
-	if(!init){
+	if(!init){ 
 		pre_t = localtime(&present_time);
 		init =1;
 	}
-
-	printf("out clock : ");
-	for(i=0;i<MAX_SWITCH;i++){
-		printf("%d ",(int)sw[i]);
-	}
-	printf("\n");
     sum_sw = check_sw(sw);
-	printf("sum_sw1 : %d \n",sum_sw);
 	
-    if(sum_sw==0 && change_toggle==0){// not switch
+    if(sum_sw==0 && change_toggle==0){// din't push any switch
         present_time = time(NULL);
 		
 		pre_t = localtime(&present_time);
@@ -358,49 +271,45 @@ int out_clock(unsigned char sw[],int fd_fnd, char* led_addr){
 		led_flag=1;
 		
     }
-	printf("\n");
-	//printf("sum_sw2 : %d\n",sum_sw);
     if(sum_sw==256) {// switch 1 
-		printf("change mode\n");
-        change_toggle ^=1;
-		if(change_toggle==1){
+        change_toggle ^=1; // reverse toggle
+		if(change_toggle==1){ // in edit mode
         	*led_addr=0;
         }
-		else{
+		else{ // out edit mode
 			*led_addr=128;
 			flag=0;
 		}
     }
-    if(change_toggle){// edit mode
+    if(change_toggle){// time edit mode
 		t_hour = pre_t->tm_hour;
 		t_min = pre_t->tm_min;
-        if(clock()-s>SEC){
+        if(clock() - s > 400){ // compare now time and previous time stored 
             if(flag==0){
-                *led_addr^=16;
+                *led_addr^=16; // led4 setting
                 flag=1;
             }
             else{
-                *led_addr^=48;
+                *led_addr^=48; //  flicker exclusive OR led 3 and led 4
             }
             s = clock();
         }
 
-        if(sum_sw==128){// switch 2
+        if(sum_sw==128){// switch 2 => initialize board time 
             present_time = time(NULL);
             pre_t = localtime(&present_time);
 			t_min = pre_t->tm_min; min=0;
 			t_hour = pre_t->tm_hour; hour=0;
         }
         if(sum_sw==64){// switch 3
-			printf("min++\n");
-            min += 1;
+            min += 1; // miniute ++
 			if(t_min+min==60) { min=-t_min; hour++;}
         }
         if(sum_sw==32){// switch 4
-			printf("hour++\n");
-            hour += 1;
+            hour += 1; // hour ++
 			if(t_hour+hour==25) hour=-t_hour;
         }
+        // not realtime 
 		fnd[0]=(t_hour+hour)/10;
 		fnd[1]=(t_hour+hour)%10;
 		fnd[2]=(t_min+min)/10;
@@ -408,6 +317,7 @@ int out_clock(unsigned char sw[],int fd_fnd, char* led_addr){
 		write(fd_fnd,&fnd,4);
 		return 0;
 	}
+    // realtime
 	fnd[0]=(pre_t->tm_hour+hour)/10;
 	fnd[1]=(pre_t->tm_hour+hour)%10;
 	fnd[2]=(pre_t->tm_min+min)/10;
@@ -415,7 +325,7 @@ int out_clock(unsigned char sw[],int fd_fnd, char* led_addr){
 	write(fd_fnd,&fnd,4);
 	return 0;
 }
-int check_sw(unsigned char sw[]){
+int check_sw(unsigned char sw[]){ // calculate pressed switch 
     int i;
     int sum=0;
     for(i=8;i>=0;i--){
@@ -425,7 +335,7 @@ int check_sw(unsigned char sw[]){
     }
     return sum;
 }
-int out_counter(unsigned char sw[], int fd_fnd, char* led_addr)
+int out_counter(unsigned char sw[], int fd_fnd, char* led_addr) 
 {
     int i, sum_sw;
     static char fnd[4]={0,};
@@ -433,19 +343,15 @@ int out_counter(unsigned char sw[], int fd_fnd, char* led_addr)
     int sum;
     sum_sw = check_sw(sw);
     if(!init){
-        //if(sum_sw == 0 && t_mode ==1){ // no input
-            for(i=0;i<4;i++){
-                fnd[i]=0;
-            }
-            write(fd_fnd,&fnd,4);
-            *led_addr = 64;
-			printf("22222\n");
-        //}
+        for(i=0;i<4;i++){
+            fnd[i]=0;
+        }
+        write(fd_fnd,&fnd,4);
+        *led_addr = 64;
         init=1;
     }
 
     if(sum_sw == 256){ // switch 1 => change jinsu
-		printf("jinsu trans\n");
         t_mode++;
         sum=0;
         if(t_mode==2){ // Dec to Otc
@@ -570,7 +476,6 @@ int out_text_editor(unsigned char sw[], int fd_fnd, int fd_lcd, int fd_dot, char
     }
 
     sum_sw = check_sw(sw);
-    printf("sum_sw : %d\n",sum_sw);
     if(sum_sw >0){
         fnd[3]++;
         if(fnd[3]>=10){ fnd[3]=0; fnd[2]++;}
@@ -754,9 +659,6 @@ int out_draw_board(unsigned char sw[], int fd_fnd, int fd_dot)
 	}
 	sum_sw = check_sw(sw); // calculate input sw
 	// cursor off
-	printf("sum_sw : %d\n",sum_sw);
-	printf(" cursor : %d , %d\n",cursor_row,cursor_col);
-	printf("0x : %d\n",0x40>>cursor_col);
 	//dot[cursor_row] |= (unsigned char)(0x40 >> cursor_col);
 	if(flicker){
 		if(clock()-t>=340){
@@ -842,7 +744,6 @@ int out_draw_board(unsigned char sw[], int fd_fnd, int fd_dot)
 		dot[cursor_row] |= (0x40>>cursor_col);
 	}
 	else if(sum_sw==1){ // switch 9  => reverse
-		printf("dsadasdasddsa\n");
 		for(i=0;i<10;i++){
 			for(j=0;j<7;j++){
 				if(!select[i][j]){
@@ -855,7 +756,6 @@ int out_draw_board(unsigned char sw[], int fd_fnd, int fd_dot)
 				}
 			}
 		}
-		printf("cursor : %d, %d\n",cursor_row,cursor_col);
 	}
 
 	write(fd_fnd,fnd,4);
