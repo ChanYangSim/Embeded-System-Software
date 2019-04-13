@@ -215,7 +215,7 @@ int output_proc()
 			if(back_count>=3){ // if 3 more error then setting device zero and break => terminate
 				*led_addr=0; 
 				write(fd_fnd,fnd,4);
-				write(fd_lcd,lcd,8);
+				write(fd_lcd,lcd,32);
 				write(fd_dot,dot,10);
 				break;
 			}
@@ -247,7 +247,8 @@ int output_proc()
 			out_draw_board(sw,fd_fnd,fd_dot,msgrecv_sw.sum_sw);
         }
         else if(msgrecv_d.text[1]==EXTRA){ // MODE == 5
-			if(DRAW_BOARD != pre_mode){*led_addr=0; write(fd_fnd,fnd,4);write(fd_lcd,lcd,32); write(fd_dot,dot,10);} // if change mode then initialize
+			//if(DRAW_BOARD != pre_mode){*led_addr=0; write(fd_fnd,fnd,4);write(fd_lcd,lcd,32); write(fd_dot,dot,10);} // if change mode then initialize
+			extra_mode(sw,fd_fnd,fd_lcd,fd_dot,led_addr,msgrecv_sw.sum_sw);
         }
 		pre_mode=msgrecv_d.text[1]; // store latest mode
 		printf("pre_mode: %d\n",pre_mode);
@@ -465,7 +466,6 @@ int trim_number(char fnd[],int jinsu){
 }
 int out_text_editor(unsigned char sw[], int fd_fnd, int fd_lcd, int fd_dot, char* led_addr,int change_mode, int sum_sw){
     int i, count_0=0,count_num=0,flag=0,temp,temp_idx;
-//	int sum_sw;
     static int sw_count[9]={0,};
     static int init=0, p_mode=0, cursor, pre_sum_sw[5000], pre_button_num=0;
     static char fnd[4]={0,};
@@ -662,7 +662,6 @@ int out_draw_board(unsigned char sw[], int fd_fnd, int fd_dot, int sum_sw)
 		for(i=0;i<4;i++){
 			fnd[i]=0;
 		}
-		//dot[0]=0x40;
 		t = clock();
 		write(fd_fnd,&fnd,4);
 		write(fd_dot,dot,10);
@@ -824,8 +823,171 @@ int out_draw_board(unsigned char sw[], int fd_fnd, int fd_dot, int sum_sw)
 	write(fd_fnd,fnd,4);
 	write(fd_dot,dot,10);
 			
-	//usleep(50000);
-	
 	return 0;
 }
-//int extra_mode(unsigned char sw[], int fd_fnd, int fd_
+int extra_mode(unsigned char sw[], int fd_fnd, int fd_lcd, int fd_dot, char* led_addr, int sum_sw){
+
+	static int init=0,start_flag=0,flag1=0,flag2=0,flag3=0,ans_cnt=0,end_game1=0;
+	int i,j, ans;
+	char se1[21],se2[21],se3[21];
+	static int ans_row=0,ans_col=0,play=0,termi=0,sum=0,end_game2=0,end_game3=0;
+	//static char dot[10][7]={0,};
+	static char fnd[4]={0,};
+	static unsigned char dot[10]={0,};
+	static char lcd[32];
+	static clock_t t,t1,t2,t3,take_t;
+	if(!init){
+		for(i=0;i<4;i++){
+			fnd[i]=0;
+		}
+		t=clock();
+		memset(lcd,' ',32);
+		write(fd_fnd,&fnd,4);
+		write(fd_dot,dot,10);
+		write(fd_lcd,lcd,32);
+		init=1;
+	}
+	if((!termi) && ((clock()-t)/(double)1000) <= 20){ // for 40 sec game play
+		if(!start_flag){ //switch 5 => start game
+			strncpy(lcd,"SELECT SW EASY 1 NORMAL 2 HARD 3",32);
+			write(fd_lcd,lcd,32);
+			start_flag=1;
+		}
+		else if(sum_sw==2){ // exit
+			strncpy(lcd,"BYE BYE..                           ",32);
+			write(fd_lcd,lcd,32);
+			for(i=0;i<4;i++)	fnd[i]=0;
+			for(i=0;i<10;i++)	dot[i]=0x00;
+			write(fd_fnd,fnd,4);
+			write(fd_dot,dot,10);
+			termi=1;
+		}
+		else if( ((sum_sw==256) && (!flag1) && !play ) || end_game1 ) { // switch 1 => easy mode
+			set_scatter(fd_dot,1,&ans);
+			t1=clock();
+			flag1=1;
+			play=1;
+			strncpy(lcd,"PRESS SW ANSWER ROW AND COL     ",32);
+			ans_row=-1; ans_col=-1; end_game1=0;
+		}
+		else if( ((sum_sw==128) && (!flag2) && !play) || end_game2){
+			set_scatter(fd_dot,2,&ans);
+			t2=clock();
+			flag2=1;
+			play=1;
+			strncpy(lcd,"PRESS SW ANSWER ROW AND COL     ",32);
+			ans_row=-1; ans_col=-1; end_game2=0;
+		}
+		else if( ((sum_sw==64) && (!flag3) && !play) || end_game3 ){
+			set_scatter(fd_dot,3,&ans);
+			t3=clock();
+			flag3=1;
+			play=1;
+			strncpy(lcd,"PRESS SW ANSWER ROW AND COL     ",32);
+			ans_row=-1; ans_col=-1; end_game3=0;
+		}
+		else if( ans_row==-1 && sum_sw>0  ){
+			strncpy(lcd,"ROW INPUTED                     ",32);
+			write(fd_lcd,lcd,32);
+			for(i=0;i<9;i++){
+				if(sw[i]){
+					ans_row=i;
+					break;
+				}
+			}
+		}
+		else if(ans_col==-1 && sum_sw>0){
+			for(i=0;i<9;i++){
+				if(sw[i]){
+					ans_col=i;
+					break;
+				}
+			}
+			if( (ans/7 == ans_row) && (ans % 7 == ans_col) ){ // correct answer
+				if(t1) {
+					take_t = clock()-t1;
+					sprintf(se1,"%lf",(take_t)/(double)1000);
+					memset(lcd,0,32);
+					strncpy(lcd,"IT TAKES        ",16);
+					strncat(lcd,se1,8);
+					strncat(lcd," SEC    ",8);
+					write(fd_lcd,lcd,32);
+					if(take_t <=2) ans_cnt++;
+				}
+				else if(t2) {
+					take_t = clock()-t2;
+					sprintf(se1,"%lf",(take_t)/(double)1000);
+					memset(lcd,0,32);
+					strncpy(lcd,"IT TAKES        ",16);
+					strncat(lcd,se1,8);
+					strncat(lcd," SEC    ",8);
+					write(fd_lcd,lcd,32);
+					if(take_t <=2) ans_cnt++;
+				}
+				else if(t3) {
+					take_t = clock()-t2;
+					sprintf(se1,"%lf",(take_t)/(double)1000);
+					memset(lcd,0,32);
+					strncpy(lcd,"IT TAKES        ",16);
+					strncat(lcd,se1,8);
+					strncat(lcd," SEC    ",8);
+					write(fd_lcd,lcd,32);
+					if(take_t <=2) ans_cnt++;
+				}
+
+				//strncpy(lcd," EXIT SW 8                      ",32);
+				ans_cnt++;
+				//ans_row=-1;
+				//ans_col=-1;
+			}
+			else{ // wrong answer
+				strncpy(lcd,"YOUR ANSWER IS WRONG.. EXIT SW 8",32);
+				write(fd_lcd,lcd,32);
+				usleep(500000);
+			}
+			play=0;
+			if(t1) end_game1=1; if(t2) end_game2=1; if(t3) end_game3=1;
+
+		}
+
+	}
+	else{
+		strncpy(lcd," <= YOUR POINT       THANK YOU!     ",32);   
+		write(fd_lcd,lcd,32);
+		sum += ans_cnt*100;
+		fnd[0]=sum/1000; sum % 1000;
+		fnd[1]=sum/100; sum % 100;
+		write(fd_fnd,fnd,4);
+	}
+	return 0;
+}
+
+int set_scatter(int fd_dot, int dif, int *spot)
+{
+	int i,sub_i;
+	int dot_cnt;
+	int ran_num[35]={0,};
+	unsigned char dot[10]={0,};
+	srand(time(NULL));
+	if(dif == 3) dot_cnt = 22;	//HARD
+	else if(dif == 2) dot_cnt = 17;	//NORMAL
+	else if(dif == 1) dot_cnt = 12; //EASY
+
+	for(i=0;i<dot_cnt+1;i++){
+		ran_num[i] = rand()%35;
+		for(sub_i=0;sub_i<i;sub_i++){
+			if(ran_num[i]==ran_num[sub_i]){
+				i--;
+				break;
+			}
+		}
+	}
+	for(i=0;i<dot_cnt;i++){
+		dot[ran_num[i]/7] |= (0x40>>(ran_num[i]%7));
+		dot[(ran_num[i]/7)+5] |= (0x40>>(ran_num[i]%7));
+	}
+	*spot=ran_num[dot_cnt];
+	dot[ran_num[dot_cnt]/7+5] |= (0x40>>(ran_num[dot_cnt]%7));
+	write(fd_dot,dot,10);
+	return 0;
+}

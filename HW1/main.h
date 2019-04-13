@@ -80,5 +80,6 @@ int out_clock(unsigned char sw[],int fd_fnd,char* led_addr, int sum_sw);
 int trim_number(char fnd[],int jinsu);
 int out_text_editor(unsigned char sw[], int fd_fnd, int fd_lcd, int fd_dot, char*,int change_mode,int sum_sw);
 int out_draw_board(unsigned char sw[], int fd_fnd, int fd_dot,int sum_sw);
+int extra_mode(unsigned char sw[], int,int,int,char*,int);
 
 //int print_lcd(int key,int p_mode,int pre_sum_sw[],int pre_button_num,int *cursor,char *text[MAX_SWITCH],int sw_count[],unsigned char lcd[],int sum_sw);
