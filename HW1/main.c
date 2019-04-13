@@ -145,7 +145,11 @@ int main_proc()
         memset(&msgrecv_sw,0,sizeof(struct msgbuf));
 		if((msgrcv(key_id_sw,(void*)&msgrecv_sw,sizeof(struct msgbuf),TYPE_SWITCH,IPC_NOWAIT))==-1)
 			printf("in main_proc msgrcv_sw error!\n");
-	
+		msgrecv_sw.sum_sw=0;
+		for(i=0;i<MAX_SWITCH;i++)
+			msgrecv_sw.sum_sw += (int)msgrecv_sw.text[8-i]*(1<<i);
+
+
 		if(msgrecv_sw.msgtype==TYPE_SWITCH){ // get type of message is SWITCH
             // message send to output process
 			//printf("%d \n",msgrecv_sw.msgtype);
@@ -226,21 +230,21 @@ int output_proc()
 		if(msgrecv_d.text[1]==CLOCK){ // MODE == 1
 			if(CLOCK != pre_mode){
 				*led_addr=0; write(fd_fnd,fnd,4); write(fd_lcd,lcd,32); write(fd_dot,dot,10);}// if change mode then initialize
-            out_clock(sw,fd_fnd,led_addr);
+            out_clock(sw,fd_fnd,led_addr,msgrecv_sw.sum_sw);
         }
 		else if(msgrecv_d.text[1]==COUNTER){ // MODE == 2
 			if(COUNTER != pre_mode){*led_addr=64; write(fd_fnd,fnd,4); write(fd_lcd,lcd,32); write(fd_dot,dot,10);change_mode=1;} // if change mode then initialize
-			out_counter(sw,fd_fnd,led_addr,change_mode);
+			out_counter(sw,fd_fnd,led_addr,change_mode,msgrecv_sw.sum_sw);
 			change_mode=0;
         }
         else if(msgrecv_d.text[1]==TEXT_EDITOR){ // MODE == 3
 			 if(TEXT_EDITOR != pre_mode){*led_addr=0;write(fd_fnd,fnd,4);write(fd_lcd,lcd,32); write(fd_dot,dot,10);change_mode=1;} // if change mode then initialize
-            out_text_editor(sw,fd_fnd,fd_lcd,fd_dot,led_addr,change_mode);
+            out_text_editor(sw,fd_fnd,fd_lcd,fd_dot,led_addr,change_mode,msgrecv_sw.sum_sw);
 			 change_mode=0;
         }
         else if(msgrecv_d.text[1]==DRAW_BOARD){ // MODE == 4
 			if(DRAW_BOARD != pre_mode){*led_addr=0; write(fd_fnd,fnd,4);write(fd_lcd,lcd,32); write(fd_dot,dot,10);} // if change mode then initialize
-			out_draw_board(sw,fd_fnd,fd_dot);
+			out_draw_board(sw,fd_fnd,fd_dot,msgrecv_sw.sum_sw);
         }
         else if(msgrecv_d.text[1]==EXTRA){ // MODE == 5
 			if(DRAW_BOARD != pre_mode){*led_addr=0; write(fd_fnd,fnd,4);write(fd_lcd,lcd,32); write(fd_dot,dot,10);} // if change mode then initialize
@@ -253,7 +257,7 @@ int output_proc()
 	return 0;
 }
 
-int out_clock(unsigned char sw[],int fd_fnd, char* led_addr){
+int out_clock(unsigned char sw[],int fd_fnd, char* led_addr,int sum_sw){
 
 	char fnd[4]={0,};
 	static int change_toggle=0, init=0,led_flag=0,flag=0,min=0,hour=0,sec=0,t_hour,t_min;
@@ -261,12 +265,11 @@ int out_clock(unsigned char sw[],int fd_fnd, char* led_addr){
 	time_t present_time=time(NULL); // present time stamp 
 	
 	static struct tm *pre_t, *lat_t;
-	int sum_sw,i;
+	int i;
 	if(!init){ 
 		pre_t = localtime(&present_time);
 		init =1;
 	}
-    sum_sw = check_sw(sw);
     if(sum_sw==0 && change_toggle==0){// din't push any switch
         present_time = time(NULL);
 		
@@ -336,23 +339,12 @@ int out_clock(unsigned char sw[],int fd_fnd, char* led_addr){
 	write(fd_fnd,&fnd,4);
 	return 0;
 }
-int check_sw(unsigned char sw[]){ // calculate pressed switch 
-    int i;
-    int sum=0;
-    for(i=8;i>=0;i--){
-        if(sw[i]==1){
-            sum+=sw[i]*(1<<(8-i));
-        }
-    }
-    return sum;
-}
-int out_counter(unsigned char sw[], int fd_fnd, char* led_addr,int change_mode) 
+int out_counter(unsigned char sw[], int fd_fnd, char* led_addr,int change_mode, int sum_sw) 
 {
-    int i, sum_sw;
-    static char fnd[4]={0,};
+    int i;
+	static char fnd[4]={0,};
     static int init=0,t_mode=1;
     int sum;
-    sum_sw = check_sw(sw);
 	printf("cc %d\n",change_mode);
 	if(change_mode==1){
 		printf("change_mode \n");
@@ -471,8 +463,9 @@ int trim_number(char fnd[],int jinsu){
     }
     return 0;
 }
-int out_text_editor(unsigned char sw[], int fd_fnd, int fd_lcd, int fd_dot, char* led_addr,int change_mode){
-    int i, sum_sw,count_0=0,count_num=0,flag=0,temp,temp_idx;
+int out_text_editor(unsigned char sw[], int fd_fnd, int fd_lcd, int fd_dot, char* led_addr,int change_mode, int sum_sw){
+    int i, count_0=0,count_num=0,flag=0,temp,temp_idx;
+//	int sum_sw;
     static int sw_count[9]={0,};
     static int init=0, p_mode=0, cursor, pre_sum_sw[5000], pre_button_num=0;
     static char fnd[4]={0,};
@@ -496,7 +489,6 @@ int out_text_editor(unsigned char sw[], int fd_fnd, int fd_lcd, int fd_dot, char
 		init=1;
     }
 
-    sum_sw = check_sw(sw);
     if(sum_sw >0){
         fnd[3]++;
         if(fnd[3]>=10){ fnd[3]=0; fnd[2]++;}
@@ -655,9 +647,9 @@ int print_lcd(int key,int p_mode,int pre_sum_sw[],int pre_button_num,int *cursor
 	}
 	return 0;
 }
-int out_draw_board(unsigned char sw[], int fd_fnd, int fd_dot)
+int out_draw_board(unsigned char sw[], int fd_fnd, int fd_dot, int sum_sw)
 {
-    int i, j, sum_sw;
+    int i, j;
     int sw_count[9]={0,};
     static clock_t t;
     static int init=0, p_mode=0, pre_sum_sw, cursor_row=0, cursor_col=0,flicker;
@@ -678,7 +670,6 @@ int out_draw_board(unsigned char sw[], int fd_fnd, int fd_dot)
 		flicker=1;
 		init=1;
 	}
-	sum_sw = check_sw(sw); // calculate input sw
 	// cursor off
 	if(flicker){
 		if(clock()-t>=200){

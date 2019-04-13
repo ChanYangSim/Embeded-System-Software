@@ -67,6 +67,7 @@
 struct msgbuf{
 	long msgtype;
 	unsigned char text[BUF_SIZE];
+	int sum_sw;
 };
 unsigned char quit =0;
 void user_signal1(int sig){quit=1;}
@@ -74,10 +75,10 @@ int input_proc();
 int output_proc();
 int main_proc();
 int check_sw(unsigned char sw[]);
-int out_clock(unsigned char sw[],int fd_fnd,char* led_addr);
+int out_clock(unsigned char sw[],int fd_fnd,char* led_addr, int sum_sw);
 //int out_counter(unsigned char sw[],int fd_fnd, char* led_addr,static char fnd[]);
 int trim_number(char fnd[],int jinsu);
-int out_text_editor(unsigned char sw[], int fd_fnd, int fd_lcd, int fd_dot, char*,int);
-int out_draw_board(unsigned char sw[], int fd_fnd, int fd_dot);
+int out_text_editor(unsigned char sw[], int fd_fnd, int fd_lcd, int fd_dot, char*,int change_mode,int sum_sw);
+int out_draw_board(unsigned char sw[], int fd_fnd, int fd_dot,int sum_sw);
 
 //int print_lcd(int key,int p_mode,int pre_sum_sw[],int pre_button_num,int *cursor,char *text[MAX_SWITCH],int sw_count[],unsigned char lcd[],int sum_sw);
