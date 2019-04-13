@@ -148,6 +148,7 @@ int main_proc()
 	
 		if(msgrecv_sw.msgtype==TYPE_SWITCH){ // get type of message is SWITCH
             // message send to output process
+			//printf("%d \n",msgrecv_sw.msgtype);
 			if(msgsnd(key_id_to_out_d,&msgrecv_d,sizeof(struct msgbuf)-sizeof(long),IPC_NOWAIT)==-1){
                 printf("in main_proc msgsnd_d error!\n");
 			}
@@ -175,8 +176,8 @@ int output_proc()
 	static unsigned char fnd[4]; memset(fnd,0,4);
 	int key_id_from_main_d = msgget((key_t)MAIN_AND_OUT_D,IPC_CREAT|0666);
     int key_id_from_main_sw = msgget((key_t)MAIN_AND_OUT_SW,IPC_CREAT|0666);
-	int fd_fnd, fd_led, fd_lcd, fd_dot, fd_mot;
-	unsigned char lcd[32],dot[10]={0,}; memset(lcd,' ',8);
+	int fd_fnd, fd_led, fd_lcd, fd_dot, fd_mot, change_mode=0;
+	unsigned char lcd[32],dot[10]={0,}; memset(lcd,' ',32);
 	static int init_1=0,init_2=0,init_3=0,init_4=0,back_count=0;
     // driver open and setting 
 	fd_fnd = open(FND_DEVICE,O_RDWR);
@@ -219,25 +220,33 @@ int output_proc()
 		for(i=0;i<MAX_SWITCH;i++){
 			sw[i]=msgrecv_sw.text[i];
 		}
+		//for(i=0;i<4;i++)
+		//	fnd[i]=0;
+		printf("now_mode : %d\n",msgrecv_d.text[1]);
 		if(msgrecv_d.text[1]==CLOCK){ // MODE == 1
-			if(CLOCK != pre_mode){*led_addr=0; write(fd_fnd,fnd,4); write(fd_lcd,lcd,8); write(fd_dot,dot,10);}// if change mode then initialize
+			if(CLOCK != pre_mode){
+				*led_addr=0; write(fd_fnd,fnd,4); write(fd_lcd,lcd,32); write(fd_dot,dot,10);}// if change mode then initialize
             out_clock(sw,fd_fnd,led_addr);
         }
-        else if(msgrecv_d.text[1]==COUNTER){ // MODE == 2
-			if(COUNTER != pre_mode){*led_addr=64; write(fd_fnd,fnd,4); write(fd_lcd,lcd,8); write(fd_dot,dot,10);} // if change mode then initialize
-			out_counter(sw,fd_fnd,led_addr);
+		else if(msgrecv_d.text[1]==COUNTER){ // MODE == 2
+			if(COUNTER != pre_mode){*led_addr=64; write(fd_fnd,fnd,4); write(fd_lcd,lcd,32); write(fd_dot,dot,10);change_mode=1;} // if change mode then initialize
+			out_counter(sw,fd_fnd,led_addr,change_mode);
+			change_mode=0;
         }
         else if(msgrecv_d.text[1]==TEXT_EDITOR){ // MODE == 3
-			 if(TEXT_EDITOR != pre_mode){*led_addr=0;write(fd_fnd,fnd,4);write(fd_lcd,lcd,8); write(fd_dot,dot,10);} // if change mode then initialize
-            out_text_editor(sw,fd_fnd,fd_lcd,fd_dot,led_addr);
+			 if(TEXT_EDITOR != pre_mode){*led_addr=0;write(fd_fnd,fnd,4);write(fd_lcd,lcd,32); write(fd_dot,dot,10);change_mode=1;} // if change mode then initialize
+            out_text_editor(sw,fd_fnd,fd_lcd,fd_dot,led_addr,change_mode);
+			 change_mode=0;
         }
         else if(msgrecv_d.text[1]==DRAW_BOARD){ // MODE == 4
-			if(DRAW_BOARD != pre_mode){*led_addr=0; write(fd_fnd,fnd,4);write(fd_lcd,lcd,8); write(fd_dot,dot,10);} // if change mode then initialize
+			if(DRAW_BOARD != pre_mode){*led_addr=0; write(fd_fnd,fnd,4);write(fd_lcd,lcd,32); write(fd_dot,dot,10);} // if change mode then initialize
 			out_draw_board(sw,fd_fnd,fd_dot);
         }
         else if(msgrecv_d.text[1]==EXTRA){ // MODE == 5
+			if(DRAW_BOARD != pre_mode){*led_addr=0; write(fd_fnd,fnd,4);write(fd_lcd,lcd,32); write(fd_dot,dot,10);} // if change mode then initialize
         }
 		pre_mode=msgrecv_d.text[1]; // store latest mode
+		printf("pre_mode: %d\n",pre_mode);
 		usleep(500000);
 	}
     //close(fd_fnd);
@@ -258,7 +267,6 @@ int out_clock(unsigned char sw[],int fd_fnd, char* led_addr){
 		init =1;
 	}
     sum_sw = check_sw(sw);
-	
     if(sum_sw==0 && change_toggle==0){// din't push any switch
         present_time = time(NULL);
 		
@@ -271,7 +279,7 @@ int out_clock(unsigned char sw[],int fd_fnd, char* led_addr){
 		led_flag=1;
 		
     }
-    if(sum_sw==256) {// switch 1 
+    if(sum_sw==256) {// switch 1
         change_toggle ^=1; // reverse toggle
 		if(change_toggle==1){ // in edit mode
         	*led_addr=0;
@@ -284,7 +292,10 @@ int out_clock(unsigned char sw[],int fd_fnd, char* led_addr){
     if(change_toggle){// time edit mode
 		t_hour = pre_t->tm_hour;
 		t_min = pre_t->tm_min;
-        if(clock() - s > 400){ // compare now time and previous time stored 
+        if((clock() - s) > 200){ // compare now time and previous time stored 
+			printf("clock() -s : %d\n",clock() -s );
+
+            s = clock();
             if(flag==0){
                 *led_addr^=16; // led4 setting
                 flag=1;
@@ -292,7 +303,6 @@ int out_clock(unsigned char sw[],int fd_fnd, char* led_addr){
             else{
                 *led_addr^=48; //  flicker exclusive OR led 3 and led 4
             }
-            s = clock();
         }
 
         if(sum_sw==128){// switch 2 => initialize board time 
@@ -315,6 +325,7 @@ int out_clock(unsigned char sw[],int fd_fnd, char* led_addr){
 		fnd[2]=(t_min+min)/10;
 		fnd[3]=(t_min+min)%10;
 		write(fd_fnd,&fnd,4);
+		
 		return 0;
 	}
     // realtime
@@ -335,13 +346,19 @@ int check_sw(unsigned char sw[]){ // calculate pressed switch
     }
     return sum;
 }
-int out_counter(unsigned char sw[], int fd_fnd, char* led_addr) 
+int out_counter(unsigned char sw[], int fd_fnd, char* led_addr,int change_mode) 
 {
     int i, sum_sw;
     static char fnd[4]={0,};
     static int init=0,t_mode=1;
     int sum;
     sum_sw = check_sw(sw);
+	printf("cc %d\n",change_mode);
+	if(change_mode==1){
+		printf("change_mode \n");
+		for(i=0;i<4;i++) fnd[i]=0;
+		write(fd_fnd,&fnd,4);
+	}
     if(!init){
         for(i=0;i<4;i++){
             fnd[i]=0;
@@ -454,7 +471,7 @@ int trim_number(char fnd[],int jinsu){
     }
     return 0;
 }
-int out_text_editor(unsigned char sw[], int fd_fnd, int fd_lcd, int fd_dot, char* led_addr){
+int out_text_editor(unsigned char sw[], int fd_fnd, int fd_lcd, int fd_dot, char* led_addr,int change_mode){
     int i, sum_sw,count_0=0,count_num=0,flag=0,temp,temp_idx;
     static int sw_count[9]={0,};
     static int init=0, p_mode=0, cursor, pre_sum_sw[5000], pre_button_num=0;
@@ -463,6 +480,10 @@ int out_text_editor(unsigned char sw[], int fd_fnd, int fd_lcd, int fd_dot, char
      char* text[MAX_SWITCH] = {".QZ","ABC","DEF","GHI","JKL","MNO","PRS","TUV","WXY"};
     unsigned char dot[2][10]={{0x1c,0x36,0x63,0x63,0x63,0x7f,0x7f,0x63,0x63,0x63},
                     {0x0c,0x1c,0x1c,0x0c,0x0c,0x0c,0x0c,0x0c,0x0c,0x1e}};
+	if(change_mode==1){
+		for(i=0;i<4;i++) fnd[i]=0;
+		write(fd_fnd,fnd,4);
+	}
     if(!init){
 		for(i=0;i<32;i++){
 			lcd[i]=' ';
@@ -659,9 +680,10 @@ int out_draw_board(unsigned char sw[], int fd_fnd, int fd_dot)
 	}
 	sum_sw = check_sw(sw); // calculate input sw
 	// cursor off
-	//dot[cursor_row] |= (unsigned char)(0x40 >> cursor_col);
 	if(flicker){
-		if(clock()-t>=340){
+		if(clock()-t>=200){
+			printf("clock() -t : %d\n",clock()-t);
+			t=clock();
 			on_off^=1;
 			if(on_off){
 				if(!select[cursor_row][cursor_col]){ // if not selected
@@ -669,17 +691,17 @@ int out_draw_board(unsigned char sw[], int fd_fnd, int fd_dot)
 					write(fd_dot,dot,10);
 				}
 			}
-			else{
+			if(!on_off){
 				if(!select[cursor_row][cursor_col]){ // if not selected
-					dot[cursor_row] -= (unsigned char)(0x40 >> cursor_col); // cursor dot off!
-					write(fd_dot,dot,10);
+					if(dot[cursor_row] & (0x40>>cursor_col)){
+						dot[cursor_row] -= (unsigned char)(0x40 >> cursor_col); // cursor dot off!
+						write(fd_dot,dot,10);
+					}
 				}
 			}
-			t=clock();
+			//t=clock();
 		}
-		
 	}
-
 
 	if(sum_sw >0){ // fnd count ++
 		fnd[3]++;
@@ -694,12 +716,28 @@ int out_draw_board(unsigned char sw[], int fd_fnd, int fd_dot)
 	}*/
 	if(sum_sw==256){ // switch 1  => reset
 		for(i=0;i<10;i++){
-			dot[i]=0x0;
+			for(j=0;j<7;j++){
+				select[i][j]=0;
+			}
 		}
+		for(i=0;i<10;i++){
+			if(i==0) dot[i]= 0x40;
+			else 	 dot[i]= 0x00;
+		}
+		cursor_row = 0;
+		cursor_col = 0;
 	}
 	else if(sum_sw==128){ // switch 2  => up
-		if( (dot[cursor_row]&&(0x40>>cursor_col)) && (!select[cursor_row][cursor_col]) )
-			dot[cursor_row] -= (0x40>>cursor_col);
+		if( select[cursor_row][cursor_col] ){
+			//cursor_row--;
+		}
+		else{
+			if(dot[cursor_row] & (0x40>>cursor_col)){
+				dot[cursor_row] -= (0x40>>cursor_col);
+			}
+		}
+		/*if( (dot[cursor_row]&&(0x40>>cursor_col)>0) && (select[cursor_row][cursor_col]==0) )
+			dot[cursor_row] -= ((unsigned char)(0x40>>cursor_col));*/
 		cursor_row--;
 		if(cursor_row<0) cursor_row=0;
 		dot[cursor_row] |= (0x40>>cursor_col);
@@ -709,8 +747,14 @@ int out_draw_board(unsigned char sw[], int fd_fnd, int fd_dot)
 		dot[cursor_row] |= (0x40>>cursor_col);
 	}
 	else if(sum_sw==32){ // switch 4  => left
-		if( (dot[cursor_row]&&(0x40>>cursor_col)) && (!select[cursor_row][cursor_col]) ) 
-			dot[cursor_row] -= (0x40>>cursor_col);
+		if( select[cursor_row][cursor_col] ){
+			//cursor_col--;
+		}
+		else{
+			if(dot[cursor_row] & (0x40>>cursor_col) ){
+				dot[cursor_row] -= (0x40>>cursor_col);
+			}
+		}
 		cursor_col--;
 		if(cursor_col<0) cursor_col=0;
 		dot[cursor_row] |= (0x40>>cursor_col);
@@ -720,8 +764,17 @@ int out_draw_board(unsigned char sw[], int fd_fnd, int fd_dot)
 		select[cursor_row][cursor_col]=1;
 	}
 	else if(sum_sw==8){ // switch 6  => right
-		if( (dot[cursor_row]&&(0x40>>cursor_col)) && (!select[cursor_row][cursor_col]) )
-			dot[cursor_row] -= (0x40>>cursor_col);
+		if( select[cursor_row][cursor_col] ){
+			//cursor_col--;
+		}
+		else{
+			if(dot[cursor_row] & (0x40>>cursor_col) ){
+				dot[cursor_row] -= (0x40>>cursor_col);
+			}
+
+		}
+		/*if( (dot[cursor_row]&&(0x40>>cursor_col)>0) && (select[cursor_row][cursor_col]==0) )
+			dot[cursor_row] -= (0x40>>cursor_col);*/
 		cursor_col++;
 		if(cursor_col>6) cursor_col=6;
 		dot[cursor_row] |= (0x40>>cursor_col);
@@ -737,8 +790,16 @@ int out_draw_board(unsigned char sw[], int fd_fnd, int fd_dot)
 		dot[cursor_row] |= (0x40>>cursor_col);
 	}
 	else if(sum_sw==2){ // switch 8  => down
-		if( (dot[cursor_row]&&(0x40>>cursor_col)) && (!select[cursor_row][cursor_col]) ) 
-			dot[cursor_row] -= (0x40>>cursor_col);
+		if( select[cursor_row][cursor_col] ){
+			//cursor_col--;
+		}
+		else{
+			if(dot[cursor_row] & (0x40>>cursor_col)){
+				dot[cursor_row] -= (0x40>>cursor_col);
+			}
+		}
+		/*if( (dot[cursor_row]&&(0x40>>cursor_col)>0) && (select[cursor_row][cursor_col]==0) ) 
+			dot[cursor_row] -= (unsigned char)(0x40>>cursor_col);*/
 		cursor_row++;
 		if(cursor_row>9) cursor_row=9;
 		dot[cursor_row] |= (0x40>>cursor_col);
@@ -756,10 +817,24 @@ int out_draw_board(unsigned char sw[], int fd_fnd, int fd_dot)
 				}
 			}
 		}
+		
 	}
+	printf("cursor : %d %d\n",cursor_row,cursor_col);
+	for(i=0;i<10;i++){
+		printf("%X ",dot[i]);
+		for(j=0;j<7;j++){
+			if(select[i][j]){
+				dot[i] |= (unsigned char)(0x40>>j);
+			}
+		}
+	}
+
 
 	write(fd_fnd,fnd,4);
 	write(fd_dot,dot,10);
+			
+	//usleep(50000);
+	
 	return 0;
 }
-
+//int extra_mode(unsigned char sw[], int fd_fnd, int fd_
