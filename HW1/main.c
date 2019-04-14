@@ -835,7 +835,7 @@ int extra_mode(unsigned char sw[], int fd_fnd, int fd_lcd, int fd_dot, char* led
 	static char fnd[4]={0,};
 	static unsigned char dot[10]={0,};
 	static char lcd[32];
-	static clock_t t,t1,t2,t3,take_t;
+	static clock_t t,t1,t2,t3,take_t,re_t;
 	if(!init){
 		for(i=0;i<4;i++){
 			fnd[i]=0;
@@ -848,6 +848,10 @@ int extra_mode(unsigned char sw[], int fd_fnd, int fd_lcd, int fd_dot, char* led
 		init=1;
 	}
 	if((!termi) && ((clock()-t)/(double)1000) <= 20){ // for 40 sec game play
+        re_t=((clock()-t)/(double)1000);
+        fnd[0]=0; fnd[1]=0; fnd[2]= re_t/10; fnd[3]= re_t%10;
+        write(fd_fnd,fnd,4);
+
 		if(!start_flag){ //switch 5 => start game
 			strncpy(lcd,"SELECT SW EASY 1 NORMAL 2 HARD 3",32);
 			write(fd_lcd,lcd,32);
@@ -952,12 +956,18 @@ int extra_mode(unsigned char sw[], int fd_fnd, int fd_lcd, int fd_dot, char* led
 
 	}
 	else{
-		strncpy(lcd," <= YOUR POINT       THANK YOU!     ",32);   
+		strncpy(lcd," <= YOUR POINT RESTART PUSH SW 5",32);   
 		write(fd_lcd,lcd,32);
+        for(i=0;i<10;i++) dot[i]=0;
 		sum += ans_cnt*100;
 		fnd[0]=sum/1000; sum % 1000;
 		fnd[1]=sum/100; sum % 100;
+        fnd[2]=0; fnd[3]=0;
 		write(fd_fnd,fnd,4);
+        write(fd_dot,dot,10);
+        if(sum_sw == 16){
+            termi=0; t=clock(); start_flag=0;
+        }
 	}
 	return 0;
 }
