@@ -69,6 +69,7 @@ struct msgbuf{
 	unsigned char text[BUF_SIZE];
 	int sum_sw;
 };
+
 unsigned char quit =0;
 void user_signal1(int sig){quit=1;}
 int input_proc();

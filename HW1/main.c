@@ -1,21 +1,20 @@
 #include "main.h"
 int main(int argc, char *argv[])
 {
-	int status; 
 	pid_t pid_in=0,pid_out=0;
-	key_t key=0;
+
 	/* input process fork */ 
 	pid_in = fork();
     if(pid_in>0){
 		/* output process fork */
         pid_out = fork();
         if(pid_out>0)
-            main_proc();
+            main_proc(); // main_process
         else
-            output_proc();
+            output_proc(); // output_process
     }
     else{
-        input_proc();
+        input_proc(); // input_process
     }
     return 0;
 }
@@ -27,12 +26,14 @@ int input_proc(){
 	int size_ev = sizeof(struct input_event); 
 	struct msgbuf msgsend, msgrecv, msgsend2;
 	key_t key_id_d, key_id_sw;
+
 	/*  open key device  */
 	fd_device = open(KEY_DEVICE,O_RDONLY | O_NONBLOCK);
 	if(fd_device <0){
 		printf("Device open error!\n");
 		close(fd_device);
 	}
+
 	/* open switch key device */
 	fd_switch = open(SWITCH_DEVICE, O_RDONLY | O_NONBLOCK);
 	if(fd_switch < 0){
@@ -46,9 +47,11 @@ int input_proc(){
 	memset(sw,0,size_sw); memset(prev_sw,0,size_sw); memset(output_sw,0,size_sw); // initialize input variable
 
 	(void)signal(SIGINT,user_signal1);
+
 	/* get message queue id */
 	key_id_d = msgget((key_t)IN_AND_MAIN_D,IPC_CREAT|0666);
 	key_id_sw = msgget((key_t)IN_AND_MAIN_SW,IPC_CREAT|0666);
+
 	int key_id_to_out_d = msgget((key_t)MAIN_AND_OUT_D,IPC_CREAT|0666);
     int key_id_to_out_sw = msgget((key_t)MAIN_AND_OUT_SW,IPC_CREAT|0666);
 	
@@ -58,8 +61,9 @@ int input_proc(){
 		memset(&msgsend,0,sizeof(struct msgbuf));
 		msgsend.msgtype=1;
         msgsend.text[1]=mode;
-		// text[1] == board mode
+
 		int read_d = read(fd_device, event, size_ev * BUF_SIZE); //read from board
+
 		if(read_d >= sizeof(event[0]))
 		{
 			if(event[0].value == KEY_PRESS){
@@ -95,10 +99,12 @@ int input_proc(){
 				memset(&event[0],0,sizeof(event[0]));
 			}
 		}
+        /* message queue send */
 		if(msgsnd(key_id_d,&msgsend,sizeof(struct msgbuf)-sizeof(long),IPC_NOWAIT)==-1)
 			printf("in input_proc msgsnd_d error!\n");
 
 		memset(sw,0,size_sw);
+
 		int read_sw = read(fd_switch,&sw,MAX_SWITCH);
 		if(read_sw<0){
 			printf(" switch read error!\n");
@@ -143,8 +149,11 @@ int main_proc()
         }
 
         memset(&msgrecv_sw,0,sizeof(struct msgbuf));
+
+        /* message queue receive */
 		if((msgrcv(key_id_sw,(void*)&msgrecv_sw,sizeof(struct msgbuf),TYPE_SWITCH,IPC_NOWAIT))==-1)
 			printf("in main_proc msgrcv_sw error!\n");
+
 		msgrecv_sw.sum_sw=0;
 		for(i=0;i<MAX_SWITCH;i++)
 			msgrecv_sw.sum_sw += (int)msgrecv_sw.text[8-i]*(1<<i);
@@ -557,7 +566,7 @@ int out_text_editor(unsigned char sw[], int fd_fnd, int fd_lcd, int fd_dot, char
 }
 int print_lcd(int key,int p_mode,int pre_sum_sw[],int pre_button_num,int *cursor, char* text[MAX_SWITCH],int sw_count[],unsigned char lcd[],int sum_sw){
 	int i,temp,temp_idx,flag=0,flag2=0;
-	if(p_mode==0){
+	if(p_mode==0){ // english mode
 		// check if cotinue to press button or not
 		for(i=pre_button_num;i>=0;i--){
 			if(pre_sum_sw[i]!=0){
@@ -719,26 +728,22 @@ int out_draw_board(unsigned char sw[], int fd_fnd, int fd_dot, int sum_sw)
 	}
 	else if(sum_sw==128){ // switch 2  => up
 		if( select[cursor_row][cursor_col] ){
-			//cursor_row--;
 		}
 		else{
 			if(dot[cursor_row] & (0x40>>cursor_col)){
-				dot[cursor_row] -= (0x40>>cursor_col);
+				dot[cursor_row] -= (0x40>>cursor_col); // previous cursor is off
 			}
 		}
-		/*if( (dot[cursor_row]&&(0x40>>cursor_col)>0) && (select[cursor_row][cursor_col]==0) )
-			dot[cursor_row] -= ((unsigned char)(0x40>>cursor_col));*/
 		cursor_row--;
 		if(cursor_row<0) cursor_row=0;
-		dot[cursor_row] |= (0x40>>cursor_col);
+		dot[cursor_row] |= (0x40>>cursor_col); // new cursor is on
 	}
 	else if(sum_sw==64){ // switch 3  =>  cursor
-		flicker =0;
-		dot[cursor_row] |= (0x40>>cursor_col);
+		flicker = 0;
+		//dot[cursor_row] |= (0x40>>cursor_col);
 	}
 	else if(sum_sw==32){ // switch 4  => left
 		if( select[cursor_row][cursor_col] ){
-			//cursor_col--;
 		}
 		else{
 			if(dot[cursor_row] & (0x40>>cursor_col) ){
@@ -755,16 +760,12 @@ int out_draw_board(unsigned char sw[], int fd_fnd, int fd_dot, int sum_sw)
 	}
 	else if(sum_sw==8){ // switch 6  => right
 		if( select[cursor_row][cursor_col] ){
-			//cursor_col--;
 		}
 		else{
 			if(dot[cursor_row] & (0x40>>cursor_col) ){
 				dot[cursor_row] -= (0x40>>cursor_col);
 			}
-
 		}
-		/*if( (dot[cursor_row]&&(0x40>>cursor_col)>0) && (select[cursor_row][cursor_col]==0) )
-			dot[cursor_row] -= (0x40>>cursor_col);*/
 		cursor_col++;
 		if(cursor_col>6) cursor_col=6;
 		dot[cursor_row] |= (0x40>>cursor_col);
@@ -781,15 +782,12 @@ int out_draw_board(unsigned char sw[], int fd_fnd, int fd_dot, int sum_sw)
 	}
 	else if(sum_sw==2){ // switch 8  => down
 		if( select[cursor_row][cursor_col] ){
-			//cursor_col--;
 		}
 		else{
 			if(dot[cursor_row] & (0x40>>cursor_col)){
 				dot[cursor_row] -= (0x40>>cursor_col);
 			}
 		}
-		/*if( (dot[cursor_row]&&(0x40>>cursor_col)>0) && (select[cursor_row][cursor_col]==0) ) 
-			dot[cursor_row] -= (unsigned char)(0x40>>cursor_col);*/
 		cursor_row++;
 		if(cursor_row>9) cursor_row=9;
 		dot[cursor_row] |= (0x40>>cursor_col);
