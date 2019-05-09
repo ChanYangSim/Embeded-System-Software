@@ -1,7 +1,3 @@
-/* FPGA FND Ioremap Control
-FILE : fpga_fpga_driver.c 
-AUTH : largest@huins.com */
-
 #include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/init.h>
@@ -52,6 +48,16 @@ static unsigned char *iom_fpga_text_lcd_addr;
 static unsigned char *iom_fpga_fnd_addr;
 static unsigned char *iom_fpga_dot_addr;
 
+struct struct_mydata mydata;
+
+static void kernel_timer_blink(unsigned long timeout);
+ssize_t kernel_timer_write(struct file *inode, const char *gdata, size_t length, loff_t *off_what);
+
+ssize_t iom_dev_driver_write(struct file *inode, const char *gdata, size_t length, loff_t *off_what);
+ssize_t iom_dev_driver_ioctl(struct file *inode);
+int iom_dev_driver_open(struct inode *minode, struct file *mfile);
+int iom_dev_driver_release(struct inode *minode, struct file *mfile);
+
 // define file_operations structure
 struct file_operations iom_dev_driver_fops =
 {
@@ -69,15 +75,6 @@ static struct struct_mydata {
     unsigned int iter_count;
 };
 
-struct struct_mydata mydata;
-
-static void kernel_timer_blink(unsigned long timeout);
-ssize_t kernel_timer_write(struct file *inode, const char *gdata, size_t length, loff_t *off_what);
-
-ssize_t iom_dev_driver_write(struct file *inode, const char *gdata, size_t length, loff_t *off_what);
-ssize_t iom_dev_driver_ioctl(struct file *inode);
-int iom_dev_driver_open(struct inode *minode, struct file *mfile);
-int iom_dev_driver_release(struct inode *minode, struct file *mfile);
 
 // when this device open, call this fucntion
 int iom_dev_driver_open(struct inode *minode, struct file *mfile) 
@@ -100,9 +97,6 @@ int iom_dev_driver_release(struct inode *minode, struct file *mfile)
 
 
 ssize_t iom_dev_driver_write(struct file *inode, const char *gdata, size_t length, loff_t *off_what){
-    unsigned char dot_value[10];
-    unsigned char fnd_value[4];
-    unsigned char led;
 
     unsigned int value, fnd_position, fnd_value, interval, iter_count;
     const char *tmp = gdata;
@@ -125,13 +119,13 @@ ssize_t iom_dev_driver_write(struct file *inode, const char *gdata, size_t lengt
 static void kernel_timer_blink(unsigned long timeout) {
 	struct struct_mydata *p_data = (struct struct_mydata*)timeout;
 
-	printk("kernel_timer_blink %d\n", p_data->count);
+	/*printk("kernel_timer_blink %d\n", p_data->count);
 
 	p_data->count++;
 	if( p_data->count > 15 ) {
 		return;
-	}
-
+	}*/
+	
 	mydata.timer.expires = get_jiffies_64() + (1 * HZ);
 	mydata.timer.data = (unsigned long)&mydata;
 	mydata.timer.function = kernel_timer_blink;
@@ -141,14 +135,17 @@ static void kernel_timer_blink(unsigned long timeout) {
 
 ssize_t kernel_timer_write(struct file *inode, const char *gdata, size_t length, loff_t *off_what) {
 	const char *tmp = gdata;
-	unsigned int value = 0;
 
+    unsigned int value, fnd_position, fnd_value, interval, iter_count;
 	// 1 byte
 	if (copy_from_user(&value, tmp, 4)) {
 		return -EFAULT;
 	}
-
-	mydata.
+	mydata.fnd_position = value>>24; value &= 0x00FFFFFF;
+    mydata.fnd_value = value>>16; value &= 0x0000FFFF;
+    mydata.interval = value>>8; value &= 0x000000FF;
+    mydata.iter_count = value;
+	//mydata.
 
 	//printk("data  : %d \n",mydata.count);
 
@@ -180,7 +177,7 @@ int __init iom_dev_driver_init(void)
     iom_fpga_led_addr = ioremap(IOM_LED_ADDRESS, 0x1);
     iom_fpga_dot_addr = ioremap(IOM_FPGA_DOT_ADDRESS, 0x10);
 
-	printk("init module, %s major number : %d\n", IOM_DEV_DRIVER, IOM_DEV_DRIVER);
+	printk("init module, %s major number : %d\n", IOM_DEV_DRIVER_NAME, IOM_DEV_DRIVER_MAJOR);
 
 	return 0;
 }
