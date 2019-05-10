@@ -42,13 +42,11 @@
 
 //Global variable
 static int fpga_dev_driver_usage = 0;
-static int kernel_timer_usage = 0;
+//static int kernel_timer_usage = 0;
 static unsigned char *iom_fpga_led_addr;
 static unsigned char *iom_fpga_text_lcd_addr;
 static unsigned char *iom_fpga_fnd_addr;
 static unsigned char *iom_fpga_dot_addr;
-
-struct struct_mydata mydata;
 
 static void kernel_timer_blink(unsigned long timeout);
 ssize_t kernel_timer_write(struct file *inode, const char *gdata, size_t length, loff_t *off_what);
@@ -67,22 +65,23 @@ struct file_operations iom_dev_driver_fops =
 	.release	=	iom_dev_driver_release,
 };
 
-static struct struct_mydata {
+
+struct struct_mydata {
 	struct timer_list timer;
     unsigned int fnd_position;
     unsigned int fnd_value;
     unsigned int interval;
     unsigned int iter_count;
 };
+struct struct_mydata mydata;
+
 
 
 // when this device open, call this fucntion
 int iom_dev_driver_open(struct inode *minode, struct file *mfile) 
 {	
 	if(fpga_dev_driver_usage != 0) return -EBUSY;
-
 	fpga_dev_driver_usage = 1;
-
 	return 0;
 }
 
@@ -95,18 +94,13 @@ int iom_dev_driver_release(struct inode *minode, struct file *mfile)
 }
 
 
-
 ssize_t iom_dev_driver_write(struct file *inode, const char *gdata, size_t length, loff_t *off_what){
 
-    unsigned int value, fnd_position, fnd_value, interval, iter_count;
+    unsigned int value;
+	//unsigned int fnd_position, fnd_value, interval, iter_count;
     const char *tmp = gdata;
     if( copy_from_user(&value, tmp, length))
         return -EFAULT;
-
-    fnd_position =value>>24; value &= 0x00FFFFFF;
-    fnd_value = value>>16; value &= 0x0000FFFF;
-    interval = value>>8; value &= 0x000000FF;
-    iter_count = value;
 
     kernel_timer_write(inode,gdata,length,off_what);
 
@@ -114,29 +108,90 @@ ssize_t iom_dev_driver_write(struct file *inode, const char *gdata, size_t lengt
 
 }
 
+static void output_blink(unsigned long info_p){
+	struct struct_mydata *p_data = (struct struct_mydata*)info_p;
 
+	static unsigned char fnd[4]={0,};
+	unsigned short int value_short =0;
+
+	//static unsigned char led=0;
+	static unsigned char lcd_h[16]={"20141542        "};
+	static unsigned char lcd_r[16]={"simchanyang     "};
+	unsigned char value_lcd[33];
+	unsigned short s_value;
+	
+	int i,j;
+	//output led
+	s_value = (unsigned short)128>>(p_data->fnd_value-1);
+	outw(s_value,(unsigned int)iom_fpga_led_addr);
+
+	//output fnd
+	for(i=0;i<4;i++) fnd[i]=0;
+	fnd[p_data->fnd_position-1] = p_data->fnd_value;
+	value_short = fnd[0] << 12 | fnd[1] << 8 | fnd[2] << 4 | fnd[3];
+	outw(value_short,(unsigned int)iom_fpga_fnd_addr);
+
+	//output lcd
+		
+	for(i=0;i<16;i++)
+		value_lcd[i]=lcd_h[i];
+	for(i=0;i<16;i++)
+		value_lcd[i+16]=lcd_r[i];
+	for(i=0;i<32;i++){
+		s_value = ((value_lcd[i] & 0xFF) << 8) | (value_lcd[i+1] & 0xFF);
+		outw(s_value,(unsigned int)iom_fpga_text_lcd_addr+i);
+		i++;
+	}
+	//output dot
+	for(i=0;i<10;i++){
+		s_value = fpga_number[p_data->fnd_value][i] & 0x7F;
+		outw(s_value,(unsigned int)(iom_fpga_dot_addr+(i*2)));
+	}
+	p_data->fnd_value++;	
+	if(p_data->fnd_value>8){
+		p_data->fnd_value=1;
+		p_data->fnd_position++;
+		if(p_data->fnd_position>4)
+			p_data->fnd_position =1;
+	}
+
+	if(p_data->iter_count==1){
+		s_value=0; value_short=0;
+		for(i=0;i<10;i++){
+		outw(s_value,(unsigned int)(iom_fpga_dot_addr+(i*2)));
+		}
+		for(i=0;i<32;i++){
+		outw(s_value,(unsigned int)iom_fpga_text_lcd_addr+i);i++;
+		}
+		outw(value_short,(unsigned int)iom_fpga_fnd_addr);
+		outw(s_value,(unsigned int)iom_fpga_led_addr);
+	}
+	
+	
+}
 
 static void kernel_timer_blink(unsigned long timeout) {
 	struct struct_mydata *p_data = (struct struct_mydata*)timeout;
 
-	/*printk("kernel_timer_blink %d\n", p_data->count);
+	printk("kernel_timer_blink %d %d %d %d\n",
+		p_data->fnd_position, p_data->fnd_value, p_data->interval, p_data->iter_count);
+	output_blink(timeout);
+	--p_data->iter_count;
+	if(!p_data->iter_count) return;
+    	
+	p_data->timer.expires = get_jiffies_64() + (1 * HZ);
+	p_data->timer.data = (unsigned long)&mydata;
+	p_data->timer.function = kernel_timer_blink;
 
-	p_data->count++;
-	if( p_data->count > 15 ) {
-		return;
-	}*/
+	add_timer(&p_data->timer);
 	
-	mydata.timer.expires = get_jiffies_64() + (1 * HZ);
-	mydata.timer.data = (unsigned long)&mydata;
-	mydata.timer.function = kernel_timer_blink;
-
-	add_timer(&mydata.timer);
 }
 
 ssize_t kernel_timer_write(struct file *inode, const char *gdata, size_t length, loff_t *off_what) {
 	const char *tmp = gdata;
 
-    unsigned int value, fnd_position, fnd_value, interval, iter_count;
+    unsigned int value;
+    //unsigned int fnd_position, fnd_value, interval, iter_count;
 	// 1 byte
 	if (copy_from_user(&value, tmp, 4)) {
 		return -EFAULT;
@@ -145,11 +200,7 @@ ssize_t kernel_timer_write(struct file *inode, const char *gdata, size_t length,
     mydata.fnd_value = value>>16; value &= 0x0000FFFF;
     mydata.interval = value>>8; value &= 0x000000FF;
     mydata.iter_count = value;
-	//mydata.
-
-	//printk("data  : %d \n",mydata.count);
-
-	del_timer_sync(&mydata.timer);
+	printk("timer_write: %d %d %d %d\n",mydata.fnd_position,mydata.fnd_value,mydata.interval,mydata.iter_count);
 
 	mydata.timer.expires = jiffies + (1 * HZ);
 	mydata.timer.data = (unsigned long)&mydata;
@@ -176,6 +227,7 @@ int __init iom_dev_driver_init(void)
     iom_fpga_text_lcd_addr = ioremap(IOM_FPGA_TEXT_LCD_ADDRESS, 0x32);
     iom_fpga_led_addr = ioremap(IOM_LED_ADDRESS, 0x1);
     iom_fpga_dot_addr = ioremap(IOM_FPGA_DOT_ADDRESS, 0x10);
+	init_timer(&(mydata.timer));
 
 	printk("init module, %s major number : %d\n", IOM_DEV_DRIVER_NAME, IOM_DEV_DRIVER_MAJOR);
 
@@ -188,7 +240,7 @@ void __exit iom_dev_driver_exit(void)
     iounmap(iom_fpga_text_lcd_addr);
     iounmap(iom_fpga_led_addr);
     iounmap(iom_fpga_dot_addr);
-
+	del_timer_sync(&mydata.timer);
 	unregister_chrdev(IOM_DEV_DRIVER_MAJOR, IOM_DEV_DRIVER_NAME);
 }
 
