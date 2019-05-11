@@ -107,7 +107,54 @@ ssize_t iom_dev_driver_write(struct file *inode, const char *gdata, size_t lengt
     return 0;
 
 }
-
+void move_lcd(unsigned char *lcd_h, unsigned char *lcd_r){
+    int i;
+    static int reftward_h=1, rightward_h=0, reftward_r=1, rightward_r=0;
+    if(reftward_h){
+        if(lcd_h[15]==' '){
+            for(i=0;i<15;i++){
+                lcd_h[i+1]=lcd_h[i];
+            }
+            lcd_h[0]=' ';
+        }
+        else{
+            reftward_h=0; rightward_h=1;
+        }
+    }
+    else if(rightward_h){
+        if(lcd_h[0]==' '){
+            for(i=0;i<15;i++){
+                lcd_h[i]=lcd_h[i+1];
+            }
+            lcd_h[15]=' ';
+        }
+        else{
+            reftward_h=1; rightward_h=0;
+        }
+    }
+    if(reftward_r){
+        if(lcd_r[15]==' '){
+            for(i=0;i<15;i++){
+                lcd_r[i+1]=lcd_r[i];
+            }
+            lcd_r[0]=' ';
+        }
+        else{
+            reftward_r=0; rightward_r=1;
+        }
+    }
+    else if(rightward_r){
+        if(lcd_r[0]==' '){
+            for(i=0;i<15;i++){
+                lcd_r[i]=lcd_r[i+1];
+            }
+            lcd_r[15]=' ';
+        }
+        else{
+            reftward_r=1; rightward_r=0;
+        }
+    }
+}
 static void output_blink(unsigned long info_p){
 	struct struct_mydata *p_data = (struct struct_mydata*)info_p;
 
@@ -132,7 +179,7 @@ static void output_blink(unsigned long info_p){
 	outw(value_short,(unsigned int)iom_fpga_fnd_addr);
 
 	//output lcd
-		
+    move_lcd(lcd_h,lcd_r);
 	for(i=0;i<16;i++)
 		value_lcd[i]=lcd_h[i];
 	for(i=0;i<16;i++)
@@ -179,7 +226,7 @@ static void kernel_timer_blink(unsigned long timeout) {
 	--p_data->iter_count;
 	if(!p_data->iter_count) return;
     	
-	p_data->timer.expires = get_jiffies_64() + (1 * HZ);
+	p_data->timer.expires = get_jiffies_64() + (p_data->interval * HZ/10);
 	p_data->timer.data = (unsigned long)&mydata;
 	p_data->timer.function = kernel_timer_blink;
 
@@ -202,7 +249,7 @@ ssize_t kernel_timer_write(struct file *inode, const char *gdata, size_t length,
     mydata.iter_count = value;
 	printk("timer_write: %d %d %d %d\n",mydata.fnd_position,mydata.fnd_value,mydata.interval,mydata.iter_count);
 
-	mydata.timer.expires = jiffies + (1 * HZ);
+	mydata.timer.expires = jiffies + (mydata.interval * HZ/10);
 	mydata.timer.data = (unsigned long)&mydata;
 	mydata.timer.function	= kernel_timer_blink;
 
