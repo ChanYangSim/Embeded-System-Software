@@ -10,6 +10,7 @@
 #include <linux/kernel.h>
 #include <linux/ioport.h>
 #include <linux/module.h>
+#include <linux/ioctl.h>
 #include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/version.h>
@@ -40,6 +41,9 @@
 #define IOM_FND_NAME "fpga_fnd"		// ioboard fpga device name
 #define IOM_FND_ADDRESS 0x08000004 // pysical address
 
+/* ioctl */
+
+
 //Global variable
 static int fpga_dev_driver_usage = 0;
 //static int kernel_timer_usage = 0;
@@ -52,7 +56,7 @@ static void kernel_timer_blink(unsigned long timeout);
 ssize_t kernel_timer_write(struct file *inode, const char *gdata, size_t length, loff_t *off_what);
 
 ssize_t iom_dev_driver_write(struct file *inode, const char *gdata, size_t length, loff_t *off_what);
-ssize_t iom_dev_driver_ioctl(struct file *inode);
+ssize_t iom_dev_driver_ioctl(struct file *inode, unsigned int cmd, const char* gdata);
 int iom_dev_driver_open(struct inode *minode, struct file *mfile);
 int iom_dev_driver_release(struct inode *minode, struct file *mfile);
 
@@ -63,6 +67,7 @@ struct file_operations iom_dev_driver_fops =
 	.open		=	iom_dev_driver_open,
 	.write		=	iom_dev_driver_write,
 	.release	=	iom_dev_driver_release,
+	.unlocked_ioctl = iom_dev_driver_ioctl
 };
 
 
@@ -92,7 +97,19 @@ int iom_dev_driver_release(struct inode *minode, struct file *mfile)
 
 	return 0;
 }
-
+ssize_t iom_dev_driver_ioctl(struct file *inode, unsigned int cmd, const char *gdata)
+{
+	
+	switch(_IOC_NR(cmd)){
+		case 0:
+			kernel_timer_write(NULL,gdata,0,0);
+			break;
+		default:
+			printk("ioctl request num error!\n");
+			return -1;
+	}
+	return 1;
+}
 
 ssize_t iom_dev_driver_write(struct file *inode, const char *gdata, size_t length, loff_t *off_what){
 
@@ -107,51 +124,55 @@ ssize_t iom_dev_driver_write(struct file *inode, const char *gdata, size_t lengt
     return 0;
 
 }
-void move_lcd(unsigned char *lcd_h, unsigned char *lcd_r){
+void move_lcd(unsigned char *lcd_h, unsigned char *lcd_r, int init){
     int i;
-    static int reftward_h=1, rightward_h=0, reftward_r=1, rightward_r=0;
-    if(reftward_h){
+    static int leftward_h=0, rightward_h=1, leftward_r=0, rightward_r=1;
+	if(!init){
+		leftward_h=0, rightward_h=1, leftward_r=0, rightward_r=1;
+		return;
+	}
+    if(rightward_h){
         if(lcd_h[15]==' '){
-            for(i=0;i<15;i++){
-                lcd_h[i+1]=lcd_h[i];
+            for(i=15;i>0;i--){
+                lcd_h[i]=lcd_h[i-1];
             }
             lcd_h[0]=' ';
-        }
-        else{
-            reftward_h=0; rightward_h=1;
+			if(lcd_h[15]!=' '){
+				leftward_h=1; rightward_h=0;
+			}
         }
     }
-    else if(rightward_h){
+    else if(leftward_h){
         if(lcd_h[0]==' '){
             for(i=0;i<15;i++){
                 lcd_h[i]=lcd_h[i+1];
             }
             lcd_h[15]=' ';
-        }
-        else{
-            reftward_h=1; rightward_h=0;
+			if(lcd_h[0]!=' '){
+           		leftward_h=0; rightward_h=1;
+			}
         }
     }
-    if(reftward_r){
+    if(rightward_r){
         if(lcd_r[15]==' '){
-            for(i=0;i<15;i++){
-                lcd_r[i+1]=lcd_r[i];
+            for(i=15;i>0;i--){
+                lcd_r[i]=lcd_r[i-1];
             }
             lcd_r[0]=' ';
-        }
-        else{
-            reftward_r=0; rightward_r=1;
+			if(lcd_r[15]!=' '){
+				leftward_r=1; rightward_r=0;
+			}
         }
     }
-    else if(rightward_r){
+    else if(leftward_r){
         if(lcd_r[0]==' '){
             for(i=0;i<15;i++){
                 lcd_r[i]=lcd_r[i+1];
             }
             lcd_r[15]=' ';
-        }
-        else{
-            reftward_r=1; rightward_r=0;
+			if(lcd_r[0]!=' '){
+           		leftward_r=0; rightward_r=1;
+			}
         }
     }
 }
@@ -164,10 +185,13 @@ static void output_blink(unsigned long info_p){
 	//static unsigned char led=0;
 	static unsigned char lcd_h[16]={"20141542        "};
 	static unsigned char lcd_r[16]={"simchanyang     "};
+	const unsigned char str1[16]={"20141542        "};
+	const unsigned char str2[16]={"simchanyang     "};
+	static int lcd_flag=0;
 	unsigned char value_lcd[33];
 	unsigned short s_value;
 	
-	int i,j;
+	int i;
 	//output led
 	s_value = (unsigned short)128>>(p_data->fnd_value-1);
 	outw(s_value,(unsigned int)iom_fpga_led_addr);
@@ -179,7 +203,15 @@ static void output_blink(unsigned long info_p){
 	outw(value_short,(unsigned int)iom_fpga_fnd_addr);
 
 	//output lcd
-    move_lcd(lcd_h,lcd_r);
+	if(!lcd_flag){
+		for(i=0;i<16;i++){
+			lcd_h[i]=str1[i];
+			lcd_r[i]=str2[i];
+		}
+		move_lcd(lcd_h,lcd_r,lcd_flag);
+		lcd_flag=1;
+	}
+
 	for(i=0;i<16;i++)
 		value_lcd[i]=lcd_h[i];
 	for(i=0;i<16;i++)
@@ -189,6 +221,8 @@ static void output_blink(unsigned long info_p){
 		outw(s_value,(unsigned int)iom_fpga_text_lcd_addr+i);
 		i++;
 	}
+    move_lcd(lcd_h,lcd_r,lcd_flag);
+
 	//output dot
 	for(i=0;i<10;i++){
 		s_value = fpga_number[p_data->fnd_value][i] & 0x7F;
@@ -202,8 +236,9 @@ static void output_blink(unsigned long info_p){
 			p_data->fnd_position =1;
 	}
 
+	// end of iteration
 	if(p_data->iter_count==1){
-		s_value=0; value_short=0;
+		s_value=0; value_short=0; lcd_flag=0;
 		for(i=0;i<10;i++){
 		outw(s_value,(unsigned int)(iom_fpga_dot_addr+(i*2)));
 		}
@@ -247,7 +282,7 @@ ssize_t kernel_timer_write(struct file *inode, const char *gdata, size_t length,
     mydata.fnd_value = value>>16; value &= 0x0000FFFF;
     mydata.interval = value>>8; value &= 0x000000FF;
     mydata.iter_count = value;
-	printk("timer_write: %d %d %d %d\n",mydata.fnd_position,mydata.fnd_value,mydata.interval,mydata.iter_count);
+	//printk("timer_write: %d %d %d %d\n",mydata.fnd_position,mydata.fnd_value,mydata.interval,mydata.iter_count);
 
 	mydata.timer.expires = jiffies + (mydata.interval * HZ/10);
 	mydata.timer.data = (unsigned long)&mydata;
