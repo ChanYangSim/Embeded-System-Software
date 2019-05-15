@@ -13,7 +13,7 @@
 int main(int argc, char *argv[])
 {
     unsigned int interval, count, start_option, ret;
-    int dev_fd, retval;
+    int dev_fd, retval, end=0;
     if( argc != 4){
         printf(" incorrect arguments\n");
         return -1;
@@ -21,6 +21,21 @@ int main(int argc, char *argv[])
     interval = atoi(argv[1]);
     count = atoi(argv[2]);
     start_option = atoi(argv[3]);
+
+    if(!(interval >=1 && interval <=100)){
+        printf("invalid interval! [1-100]\n");
+        end =1;
+    }
+    if(!(count >= 1 && count <=100)){
+        printf("invalid count! [1-100]\n");
+        end=1;
+    }
+    if(!(start_option >=1 && start_option<=8000)){
+        printf("invalid start_option! [1-8000]\n");
+        end=1;
+    }
+    if(end) return -1;
+
 
     ret = syscall(376, interval, count, start_option);
     dev_fd = open(DEVICE_NAME,O_RDWR);
@@ -32,7 +47,7 @@ int main(int argc, char *argv[])
     //retval = write(dev,&ret,sizeof(ret));
 	retval=ioctl(dev_fd,IOCTL_MY_WRITE,&ret);
     if(retval<0){
-        printf("Write Error!\n");
+        printf("ioctl Write Error!\n");
         return -1;
     }
     
