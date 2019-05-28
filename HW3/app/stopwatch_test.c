@@ -9,17 +9,17 @@
 
 #define DEVICE_NAME "/dev/stopwatch"
 
-
 int main()
 {
     int fd;
     char data;
-    fd=open(DEVICE_NAME,O_RDWR);
+    fd = open(DEVICE_NAME,O_WRONLY);
     if( fd < 0 ){
         printf("device open error!\n");
         return -1;
     }
-    data = write(fd, ,0);
+    data = write(fd,NULL,0);
+
     close(fd);
     return 0;
 }

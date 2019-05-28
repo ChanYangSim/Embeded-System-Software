@@ -1,4 +1,4 @@
-OURCES = $(shell find . -type f -iname '*.c')
+SOURCES = $(shell find . -type f -iname '*.c')
 TARGET = HW3_20141542.out
 all: $(TARGET)
 

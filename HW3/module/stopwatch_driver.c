@@ -23,10 +23,10 @@ wait_queue_head_t wait_queue;
 /*  user define variable    */
 static unsigned char *iom_fpga_fnd_addr;
 static unsigned short fnd;
-static struct timer_list timer;
+static struct timer_list timer,end_timer;
 /*                      */
 
-static int inter_major=0, inter_minor=0;
+static int inter_major=242, inter_minor=0;
 static int result;
 static dev_t inter_dev;
 static struct cdev inter_cdev;
@@ -34,17 +34,18 @@ static int inter_open(struct inode *, struct file *);
 static int inter_release(struct inode *, struct file *);
 static int inter_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos);
 
-irqreturn_t inter_home__handler(int irq, void* dev_id, struct pt_regs* reg);
+irqreturn_t inter_home_handler(int irq, void* dev_id, struct pt_regs* reg);
 irqreturn_t inter_back_handler(int irq, void* dev_id, struct pt_regs* reg);
 irqreturn_t inter_volup_handler(int irq, void* dev_id, struct pt_regs* reg);
 irqreturn_t inter_voldown_handler(int irq, void* dev_id, struct pt_regs* reg);
 
-static inter_usage=0;
 int interruptCount=0;
 static int start=0;
 static int pause=0;
 static int reset=0;
 static unsigned long sw_time=0;
+static int gpio_val;
+u64 float_time;
 u64 int4_start, int4_end;
 
 static struct file_operations inter_fops =
@@ -54,7 +55,8 @@ static struct file_operations inter_fops =
 	.release = inter_release,
 };
 
-static int output_fnd(){
+static int output_fnd(void){
+	fnd = 0;
     fnd |= (((sw_time / 60) % 60) / 10) << 12;
     fnd |= (((sw_time / 60) % 60) % 10) << 8;
     fnd |= ((sw_time % 60) / 10) << 4;
@@ -63,10 +65,11 @@ static int output_fnd(){
     return 1;
 }
     
-static void kernel_timer_callback(unsigned long sw_time) {
-    sw_time++;
-	output_fnd();
+static void kernel_timer_callback() {
 	if(pause) return;
+    sw_time++;
+	printk("sw_time : %d\n",sw_time);
+	output_fnd();
 
 	timer.expires = get_jiffies_64() + ( 1 * HZ);
 	timer.data = sw_time;
@@ -77,12 +80,9 @@ static void kernel_timer_callback(unsigned long sw_time) {
 
 ssize_t kernel_timer_write(struct file *inode, const char *gdata, size_t length, loff_t *off_what) {
     
-    if(reset){
-        sw_time=0;
-        reset=0;
-    }
     if(!start){
-        timer.expires = jiffies + (HZ/100);
+		printk("set up start!\n");
+        timer.expires = jiffies + (1 * HZ);
         timer.data = sw_time;
         timer.function	= kernel_timer_callback;
 
@@ -91,57 +91,84 @@ ssize_t kernel_timer_write(struct file *inode, const char *gdata, size_t length,
     }
 	return 1;
 }
+ssize_t kernel_remain_timer_write(u64 remain_time) {
+    
+    
+    timer.expires = jiffies + remain_time;
+    timer.function	= kernel_timer_callback;
+
+    add_timer(&timer);
+	return 1;
+}
+
+ssize_t kernel_end_timer_call() {
+	if(gpio_val==0){
+		del_timer(&timer);
+        outw(0,(unsigned int)iom_fpga_fnd_addr);
+        __wake_up(&wait_queue,1,1,NULL);
+		
+		return 1;
+	}
+	return 0;
+}
+ssize_t kernel_end_timer_write(u64 remain_time) {
+    
+    end_timer.expires = jiffies + 3*HZ;
+    end_timer.function	= kernel_end_timer_call;
+
+    add_timer(&end_timer);
+	return 1;
+}
 
 irqreturn_t inter_home_handler(int irq, void* dev_id, struct pt_regs* reg) {
 	printk(KERN_ALERT "interrupt home key!!! = %x\n", gpio_get_value(IMX_GPIO_NR(1, 11)));
-
     kernel_timer_write(NULL,NULL,0,0);
 	return IRQ_HANDLED;
 }
 
 irqreturn_t inter_back_handler(int irq, void* dev_id, struct pt_regs* reg) {
     printk(KERN_ALERT "interrupt back key!!! = %x\n", gpio_get_value(IMX_GPIO_NR(1, 12)));
+	
+    if(pause==0){ // stop pause
+		float_time = timer.expires - get_jiffies_64();
 
-    if(!pause){
         del_timer(&timer);
-        pause=1;
         start=0;
+		pause=1;
     }
+	else if(pause==1){ // start pause
+		pause=0;
+		start=1;
+		
+		init_timer(&timer);
+		kernel_remain_timer_write(float_time);
+	}
 
     return IRQ_HANDLED;
 }
 
 irqreturn_t inter_volup_handler(int irq, void* dev_id,struct pt_regs* reg) {
-    priintk(KERN_ALERT "interrupt volup key!!! = %x\n", gpio_get_value(IMX_GPIO_NR(2, 15)));
+    printk(KERN_ALERT "interrupt volup key!!! = %x\n", gpio_get_value(IMX_GPIO_NR(2, 15)));
 
-    if(start){
-        reset=1;
+    if(start || pause){
+        //reset=1;
         start=0;
         del_timer(&timer);
-        //sw_time=0;
+        sw_time=0;
+    	outw(0,(unsigned int)iom_fpga_fnd_addr);
         kernel_timer_write(NULL,NULL,0,0);
     }
     return IRQ_HANDLED;
 }
 
 irqreturn_t inter_voldown_handler(int irq, void* dev_id, struct pt_regs* reg) {
-    printk(KERN_ALERT "interrupt voldown key!!! = %x\n", gpio_get_value(IMX_GPIO_NR(5, 14)));
-    int gpio_val = gpio_get_value(IMX_GPIO_NR(5,14));
 
-    static int falling=0;
+	gpio_val = gpio_get_value(IMX_GPIO_NR(5, 14));
+    printk(KERN_ALERT "interrupt voldown key!!! = %x\n", gpio_val );
     
-    if(gpio_val == 0){ //
-        int4_start = get_jiffies_64();
+    if(gpio_val == 0){ // falling point
+		kernel_end_timer_write(0);
     }
-    else{
-        if(get_jiffies_64()-int4_start>=3*HZ){
-            del_timer(&timer);
-            outw(0,(unsigned int)iom_fpga_fnd_addr);
-            wake_up_interruptible(&wq_queue);
-            return IRQ_HANDLED;
-        }
-    }
-        
     return IRQ_HANDLED;
 }
 
@@ -151,30 +178,30 @@ static int inter_open(struct inode *minode, struct file *mfile){
 	int irq;
 
 	printk(KERN_ALERT "Open Module\n");
-
+	
 	// int1
 	gpio_direction_input(IMX_GPIO_NR(1,11));
 	irq = gpio_to_irq(IMX_GPIO_NR(1,11));
 	printk(KERN_ALERT "IRQ Number : %d\n",irq);
-	ret=request_irq(irq, &interrupt_home_handler,IRQF_TRIGGER_FALLING,"home",0);
+	ret=request_irq(irq,inter_home_handler,IRQF_TRIGGER_FALLING,"home",0);
 
 	// int2
 	gpio_direction_input(IMX_GPIO_NR(1,12));
 	irq = gpio_to_irq(IMX_GPIO_NR(1,12));
 	printk(KERN_ALERT "IRQ Number : %d\n",irq);
-	ret=request_irq(irq, &interrupt_back_handler,IRQF_TRIGGER_FALLING,"back",0);
+	ret=request_irq(irq, inter_back_handler,IRQF_TRIGGER_FALLING,"back",0);
 
 	// int3
 	gpio_direction_input(IMX_GPIO_NR(2,15));
 	irq = gpio_to_irq(IMX_GPIO_NR(2,15));
 	printk(KERN_ALERT "IRQ Number : %d\n",irq);
-	ret=request_irq(irq,&interrupt_volup_handler,IRQF_TRIGGER_FALLING,"volup",0);
+	ret=request_irq(irq,inter_volup_handler,IRQF_TRIGGER_FALLING,"volup",0);
 
 	// int4
 	gpio_direction_input(IMX_GPIO_NR(5,14));
 	irq = gpio_to_irq(IMX_GPIO_NR(5,14));
 	printk(KERN_ALERT "IRQ Number : %d\n",irq);
-	ret=request_irq(irq,&interrupt_voldown,IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING,"voldown",0);
+	ret=request_irq(irq,inter_voldown_handler,IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING,"voldown",0);
 
 	return 0;
 }
@@ -192,6 +219,10 @@ static int inter_release(struct inode *minode, struct file *mfile){
 static int inter_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos ){
 	printk("write\n");
     interruptible_sleep_on(&wait_queue);
+	start=0;
+	pause=0;
+	reset=0;
+	sw_time=0;
 	return 0;
 }
 
@@ -217,7 +248,8 @@ static int inter_register_cdev(void)
     
     iom_fpga_fnd_addr = ioremap(IOM_FND_ADDRESS, 0x04);
     init_timer(&timer);    
-
+    init_timer(&end_timer);    
+	init_waitqueue_head(&wait_queue);
 	if(error)
 	{
 		printk(KERN_NOTICE "inter Register Error %d\n", error);
@@ -229,6 +261,7 @@ static int __init inter_init(void) {
 	int result;
 	if((result = inter_register_cdev()) < 0 )
 		return result;
+	
 	printk(KERN_ALERT "Init Module Success \n");
 	printk(KERN_ALERT "Device : /dev/inter, Major Num : 242 \n");
 	return 0;
@@ -239,6 +272,8 @@ static void __exit inter_exit(void) {
 	unregister_chrdev_region(inter_dev, 1);
 
     iounmap(iom_fpga_fnd_addr);
+
+    del_timer(&end_timer);
     del_timer(&timer);
 	printk(KERN_ALERT "Remove Module Success \n");
 }
