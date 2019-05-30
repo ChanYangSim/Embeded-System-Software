@@ -45,7 +45,7 @@ static int pause=0;
 static int reset=0;
 static unsigned long sw_time=0;
 static int gpio_val;
-u64 float_time;
+u64 float_time, e_time;
 u64 int4_start, int4_end;
 
 static struct file_operations inter_fops =
@@ -102,17 +102,25 @@ ssize_t kernel_remain_timer_write(u64 remain_time) {
 }
 
 ssize_t kernel_end_timer_call() {
-	if(gpio_val==0){
-		del_timer(&timer);
-        outw(0,(unsigned int)iom_fpga_fnd_addr);
-        __wake_up(&wait_queue,1,1,NULL);
-		
-		return 1;
+	if(get_jiffies_64() - e_time>=3*HZ){
+		if(gpio_val==0 ){
+			del_timer(&timer);
+			outw(0,(unsigned int)iom_fpga_fnd_addr);
+			__wake_up(&wait_queue,1,1,NULL);
+
+			return 1;
+		}
+		else{
+			return 1;
+		}
 	}
+		end_timer.expires = jiffies + HZ/100;
+    	end_timer.function	= kernel_end_timer_call;
+    	add_timer(&end_timer);
 	return 0;
 }
 ssize_t kernel_end_timer_write(u64 remain_time) {
-    
+	e_time = get_jiffies_64();
     end_timer.expires = jiffies + 3*HZ;
     end_timer.function	= kernel_end_timer_call;
 
@@ -169,6 +177,9 @@ irqreturn_t inter_voldown_handler(int irq, void* dev_id, struct pt_regs* reg) {
     if(gpio_val == 0){ // falling point
 		kernel_end_timer_write(0);
     }
+	else if(gpio_val == 1 && get_jiffies_64()-e_time <=3*HZ){
+		del_timer(&end_timer);
+	}
     return IRQ_HANDLED;
 }
 
