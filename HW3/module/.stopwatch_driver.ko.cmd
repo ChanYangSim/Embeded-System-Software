@@ -1,1 +1,0 @@
-cmd_/home/embe/Embeded-System-Software/HW3/module/stopwatch_driver.ko := arm-none-linux-gnueabi-ld -EL -r  -T /work/achroimx_kernel/scripts/module-common.lds --build-id  -o /home/embe/Embeded-System-Software/HW3/module/stopwatch_driver.ko /home/embe/Embeded-System-Software/HW3/module/stopwatch_driver.o /home/embe/Embeded-System-Software/HW3/module/stopwatch_driver.mod.o
