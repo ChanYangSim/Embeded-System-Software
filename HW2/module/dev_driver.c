@@ -46,6 +46,7 @@
 
 //Global variable
 static int fpga_dev_driver_usage = 0;
+static int rotate=7;
 //static int kernel_timer_usage = 0;
 static unsigned char *iom_fpga_led_addr;
 static unsigned char *iom_fpga_text_lcd_addr;
@@ -178,7 +179,7 @@ void move_lcd(unsigned char *lcd_h, unsigned char *lcd_r, int init){
 }
 static void output_blink(unsigned long info_p){
 	struct struct_mydata *p_data = (struct struct_mydata*)info_p;
-
+	
 	static unsigned char fnd[4]={0,};
 	unsigned short int value_short =0;
 
@@ -190,14 +191,15 @@ static void output_blink(unsigned long info_p){
 	static int lcd_flag=0;
 	unsigned char value_lcd[33];
 	unsigned short s_value;
-	
 	int i;
 	//output led
+
 	s_value = (unsigned short)128>>(p_data->fnd_value-1);
 	outw(s_value,(unsigned int)iom_fpga_led_addr);
-
+	
 	//output fnd
 	for(i=0;i<4;i++) fnd[i]=0;
+
 	fnd[p_data->fnd_position-1] = p_data->fnd_value;
 	value_short = fnd[0] << 12 | fnd[1] << 8 | fnd[2] << 4 | fnd[3];
 	outw(value_short,(unsigned int)iom_fpga_fnd_addr);
@@ -221,35 +223,20 @@ static void output_blink(unsigned long info_p){
 		outw(s_value,(unsigned int)iom_fpga_text_lcd_addr+i);
 		i++;
 	}
-    move_lcd(lcd_h,lcd_r,lcd_flag);
+	move_lcd(lcd_h,lcd_r,lcd_flag);
 
 	//output dot
 	for(i=0;i<10;i++){
 		s_value = fpga_number[p_data->fnd_value][i] & 0x7F;
 		outw(s_value,(unsigned int)(iom_fpga_dot_addr+(i*2)));
 	}
-	p_data->fnd_value++;	
-	if(p_data->fnd_value>8){
-		p_data->fnd_value=1;
-		p_data->fnd_position++;
-		if(p_data->fnd_position>4)
-			p_data->fnd_position =1;
-	}
+	p_data->fnd_value++;
+	rotate--;
 
-	// end of iteration
-	if(p_data->iter_count==1){
-		s_value=0; value_short=0; lcd_flag=0;
-		for(i=0;i<10;i++){
-		outw(s_value,(unsigned int)(iom_fpga_dot_addr+(i*2)));
-		}
-		for(i=0;i<32;i++){
-		outw(s_value,(unsigned int)iom_fpga_text_lcd_addr+i);i++;
-		}
-		outw(value_short,(unsigned int)iom_fpga_fnd_addr);
-		outw(s_value,(unsigned int)iom_fpga_led_addr);
-	}
-	
-	
+	if(rotate==0) {p_data->fnd_position++; rotate=7;}
+	if(p_data->fnd_value==9) p_data->fnd_value=1;
+	if(p_data->fnd_position>4) p_data->fnd_position =1;
+		
 }
 
 static void kernel_timer_blink(unsigned long timeout) {
@@ -257,9 +244,21 @@ static void kernel_timer_blink(unsigned long timeout) {
 
 	printk("kernel_timer_blink %d %d %d %d\n",
 		p_data->fnd_position, p_data->fnd_value, p_data->interval, p_data->iter_count);
+	// end of iteration
+	int i;
+	if(p_data->iter_count==0){
+		for(i=0;i<10;i++){
+		outw(0,(unsigned int)(iom_fpga_dot_addr+(i*2)));
+		}
+		for(i=0;i<32;i++){
+		outw(0,(unsigned int)iom_fpga_text_lcd_addr+i);i++;
+		}
+		outw(0,(unsigned int)iom_fpga_fnd_addr);
+		outw(0,(unsigned int)iom_fpga_led_addr);
+		return;
+	}
 	output_blink(timeout);
 	--p_data->iter_count;
-	if(!p_data->iter_count) return;
     	
 	p_data->timer.expires = get_jiffies_64() + (p_data->interval * HZ/10);
 	p_data->timer.data = (unsigned long)&mydata;
@@ -279,9 +278,10 @@ ssize_t kernel_timer_write(struct file *inode, const char *gdata, size_t length,
 		return -EFAULT;
 	}
 	mydata.fnd_position = value>>24; value &= 0x00FFFFFF;
-    mydata.fnd_value = value>>16; value &= 0x0000FFFF;
-    mydata.interval = value>>8; value &= 0x000000FF;
-    mydata.iter_count = value;
+	mydata.fnd_value = value>>16; value &= 0x0000FFFF;
+	mydata.interval = value>>8; value &= 0x000000FF;
+	mydata.iter_count = value;
+	rotate=7;
 	//printk("timer_write: %d %d %d %d\n",mydata.fnd_position,mydata.fnd_value,mydata.interval,mydata.iter_count);
 
 	mydata.timer.expires = jiffies + (mydata.interval * HZ/10);
