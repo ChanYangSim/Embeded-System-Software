@@ -4,13 +4,14 @@ import com.example.androidex.R;
 
 import android.graphics.Color;
 import android.util.Log;
-import android.app.AlertDialog;
-import android.content.DialogInterface;
+//import android.app.AlertDialog;
+//import android.content.DialogInterface;
 import android.app.Activity;
 import android.content.Intent;
+//import android.content.Context;
+//import android.app.Service;
 import android.os.Bundle;
 
-//import android.content.Intent;
 import java.util.Random;
 
 import android.view.View;
@@ -20,6 +21,7 @@ import android.view.ViewGroup.LayoutParams;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.EditText;
+
 
 import android.util.DisplayMetrics;
 
@@ -33,6 +35,8 @@ public class MainActivity2 extends Activity{
 	OnClickListener ltn_1, ltn__2;
 	DisplayMetrics dm;
 	MainActivity2 mainActivity;
+	//private Intent mIntent;
+	
 	//BackThread mThread;
 	int W, H; // whole display
 	
@@ -43,17 +47,11 @@ public class MainActivity2 extends Activity{
 	int[] dy ={0,-1,1,0};
 	
 	public boolean isCompletePuzzle(){
-		Button btn_b = (Button)findViewById(blank_idx);
-		//Log.d(TAG,"blank"+btn_b.getText().toString());
-		for(int i=0;i<row*col;i++){
-			
-			Button btn = (Button)findViewById(i);
-			//Log.d(TAG,"block"+btn.getText().toString());
-		}
+	
 		if(blank_idx == row*col-1){
 			for(int i=0;i<row*col;i++){
 				Button btn = (Button)findViewById(i);
-				//Log.d(TAG,btn.getText().toString());
+
 				if( Integer.valueOf(btn.getText().toString()) != i+1 ) {
 					Log.d(TAG,"NOT COMPLETE!");
 					return false;
@@ -74,13 +72,13 @@ public class MainActivity2 extends Activity{
 		Intent intent=new Intent(MainActivity2.this, MainActivity.class);
 		startActivity(intent);
 		
-		//Log.d(TAG,String.valueOf(blank_idx));
+
 	}
 	public void ShufflePuzzle(){
 		Random random = new Random();
 		for(int i=0;i<100; i++){
 			int which = random.nextInt(4);
-			//Log.d(TAG,String.valueOf(which));
+
 			if(which==0){//left
 				SwapPuzzle(blank_idx-1);
 			}
@@ -108,8 +106,7 @@ public class MainActivity2 extends Activity{
 		blank_index[1]=blank_idx%col;
 		move_idx[0] =id/col;
 		move_idx[1] =id%col;
-		//Log.d(TAG,String.valueOf(id));
-		//Log.d(TAG,String.valueOf(blank_idx));
+
 		for(int i=0;i<4;i++){
 			if( move_idx[0]+dx[i] == blank_index[0] 
 				&& move_idx[1]+dy[i] == blank_index[1]){
@@ -117,7 +114,7 @@ public class MainActivity2 extends Activity{
 				break;
 			}
 		}
-		//Log.d(TAG,String.valueOf("11111111"));
+
 		if(move_flag==true){
 			blank_idx = id;
 			//String text = blank_block.getText().toString();
@@ -129,7 +126,7 @@ public class MainActivity2 extends Activity{
 			move_block.setText(temp);
 			move_block.setBackgroundColor(Color.BLACK);
 		}
-		//Log.d(TAG,String.valueOf("2222222222"));
+
 		
 	}
 	public void CreatePuzzle(int row, int col){
@@ -146,7 +143,7 @@ public class MainActivity2 extends Activity{
 	                // make button dynamically
 					Button button_grid = new Button(this);
 					button_grid.setLayoutParams(new LayoutParams(W/col, (H-150)/row));
-					//button_grid.setPadding(1, 1, 1, 1);
+
 					button_grid.setId(num_idx);
 					button_grid.setBackgroundColor(Color.LTGRAY);
 					
@@ -161,8 +158,10 @@ public class MainActivity2 extends Activity{
 							public void onClick(View v){
 	                        	// check button can swap and whether game finished
 								SwapPuzzle(v.getId());
-								if(isCompletePuzzle()) EndPuzzle();
-									
+								if(isCompletePuzzle()){
+									EndPuzzle();
+									stopService(new Intent(MainActivity2.this, MyService.class));
+								}
 								
 							}
 								
@@ -178,8 +177,7 @@ public class MainActivity2 extends Activity{
 			}
 			
 			while(isCompletePuzzle()) ShufflePuzzle();
-				
-			//Log.d(TAG, String.valueOf(blank_idx));
+
 	}
 	
 	@Override
@@ -208,13 +206,13 @@ public class MainActivity2 extends Activity{
 				col = Integer.parseInt(str_tok[1]);
 				
 				CreatePuzzle(row,col);
+				startService(new Intent(MainActivity2.this, MyService.class));
+		
+				
 			}
 		};
 		btn.setOnClickListener(ltn_1);
-		
-		/*mThread = new BackThread();
-		mThread.setDaemon(true);
-		mThread.start();*/
+	
 	}
 
 }
